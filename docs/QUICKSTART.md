@@ -4,7 +4,7 @@
 
 - Docker and Docker Compose installed
 - At least 4GB of RAM available for Docker
-- Ports 3000-3005, 5432, 6379, 9092, 2181 available
+- Ports 3001-3005, 6379, 9092, 2181 available
 
 ## Starting the Application
 
@@ -19,6 +19,7 @@ chmod +x start.sh
 
 ```bash
 # Start all services
+export MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/hotel_db?retryWrites=true&w=majority
 docker-compose up -d
 
 # View logs
@@ -33,13 +34,13 @@ docker-compose down
 ### 1. Health Check
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 ```
 
 ### 2. Register a User
 
 ```bash
-curl -X POST http://localhost:3000/api/auth/register \
+curl -X POST http://localhost:3001/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "john@example.com",
@@ -53,7 +54,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 ### 3. Login
 
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3001/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "john@example.com",
@@ -66,7 +67,7 @@ Save the token from the response!
 ### 4. Create a Hotel
 
 ```bash
-curl -X POST http://localhost:3000/api/hotels \
+curl -X POST http://localhost:3002/hotels \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Grand Plaza Hotel",
@@ -83,7 +84,7 @@ curl -X POST http://localhost:3000/api/hotels \
 ### 5. Create a Room
 
 ```bash
-curl -X POST http://localhost:3000/api/hotels/1/rooms \
+curl -X POST http://localhost:3002/hotels/<hotelId>/rooms \
   -H "Content-Type: application/json" \
   -d '{
     "roomNumber": "101",
@@ -99,11 +100,11 @@ curl -X POST http://localhost:3000/api/hotels/1/rooms \
 ### 6. Create a Booking
 
 ```bash
-curl -X POST http://localhost:3000/api/bookings \
+curl -X POST http://localhost:3003/bookings \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": 1,
-    "roomId": 1,
+    "userId": "<userId>",
+    "roomId": "<roomId>",
     "checkInDate": "2026-02-01",
     "checkOutDate": "2026-02-05",
     "numGuests": 2
@@ -113,18 +114,18 @@ curl -X POST http://localhost:3000/api/bookings \
 ### 7. Process Payment
 
 ```bash
-curl -X POST http://localhost:3000/api/payments \
+curl -X POST http://localhost:3004/payments \
   -H "Content-Type: application/json" \
   -d '{
-    "bookingId": 1,
+    "bookingId": "<bookingId>",
     "amount": 800,
     "paymentMethod": "credit_card"
   }'
 ```
 
-## Using Postman
+## API Testing
 
-Import the `postman-collection.json` file into Postman for a complete set of API requests.
+The repository no longer ships a bundled Postman collection. Use the cURL examples in this guide or create a Postman collection from the live endpoints you actually need.
 
 ## Viewing Logs
 
@@ -133,26 +134,19 @@ Import the `postman-collection.json` file into Postman for a complete set of API
 docker-compose logs -f
 
 # Specific service
-docker-compose logs -f api-gateway
 docker-compose logs -f user-service
 docker-compose logs -f hotel-service
 docker-compose logs -f booking-service
 docker-compose logs -f payment-service
 docker-compose logs -f notification-service
 
-# Infrastructure
-docker-compose logs -f postgres
 docker-compose logs -f redis
 docker-compose logs -f kafka
 ```
 
 ## Database Access
 
-### PostgreSQL
-
-```bash
-docker exec -it hotel-postgres psql -U hoteluser -d hotel_db
-```
+MongoDB Atlas is managed and accessed via its connection string.
 
 ### Redis
 
@@ -166,7 +160,7 @@ docker exec -it hotel-redis redis-cli
 
 ```bash
 # Find process using a port
-lsof -i :3000
+lsof -i :3001
 
 # Kill the process
 kill -9 <PID>
@@ -191,24 +185,19 @@ docker-compose ps
 ┌-------------┐
 │   Client    │
 └------┬------┘
-       │
-       ▼
-┌-----------------┐
-│  API Gateway    │ :3000
-└--------┬--------┘
-         │
-    ┌----┴----┬--------┬----------┬---------┐
-    ▼         ▼        ▼          ▼         ▼
+    │
+    ▼
 ┌--------┐ ┌--------┐ ┌--------┐ ┌--------┐ ┌--------┐
 │  User  │ │ Hotel  │ │Booking │ │Payment │ │Notific.│
 │Service │ │Service │ │Service │ │Service │ │Service │
 └---┬----┘ └---┬----┘ └---┬----┘ └---┬----┘ └---┬----┘
     │          │          │          │          │
     └----┬-----┴------┬---┴----┬-----┴----------┘
-         │            │        │
+      │            │        │
     ┌----▼----┐  ┌----▼----┐  ┌----▼----┐
-    │PostgreSQL│  │  Redis  │  │  Kafka  │
-    └---------┘  └---------┘  └---------┘
+    │MongoDB  │  │  Redis  │  │  Kafka  │
+    │ Atlas   │  └---------┘  └---------┘
+    └---------┘
 ```
 
 ## Next Steps

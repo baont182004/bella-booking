@@ -1,8 +1,17 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  Activity,
+  BadgeCheck,
+  CalendarRange,
+  Lock,
+  Mail,
+  Phone,
+  User,
+  UserPlus,
+} from "lucide-react";
 import toast from "react-hot-toast";
-import { Mail, Lock, User, Phone, Activity, UserPlus } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -12,133 +21,236 @@ export default function Register() {
     password: "",
     phone: "",
   });
+  const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (event) => {
+    setFormData((prev) => ({ ...prev, [event.target.name]: event.target.value }));
+    setErrors((prev) => ({ ...prev, [event.target.name]: undefined }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const validate = () => {
+    const nextErrors = {};
+    const phoneDigits = formData.phone.replace(/\D/g, "");
+
+    if (formData.firstName.trim().length < 2) {
+      nextErrors.firstName = "Vui lòng nhập ít nhất 2 ký tự.";
+    }
+
+    if (formData.lastName.trim().length < 2) {
+      nextErrors.lastName = "Vui lòng nhập ít nhất 2 ký tự.";
+    }
+
+    if (!/\S+@\S+\.\S+/.test(formData.email.trim())) {
+      nextErrors.email = "Vui lòng nhập địa chỉ email hợp lệ.";
+    }
+
+    if (formData.phone && phoneDigits.length < 8) {
+      nextErrors.phone = "Vui lòng nhập số điện thoại hợp lệ hoặc để trống trường này.";
+    }
+
+    if (formData.password.trim().length < 6) {
+      nextErrors.password = "Mật khẩu cần có ít nhất 6 ký tự.";
+    }
+
+    return nextErrors;
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const nextErrors = validate();
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) return;
+
     try {
       setIsSubmitting(true);
-      await register(formData);
-      toast.success("Account created successfully!");
-      navigate("/dashboard");
+      await register({
+        ...formData,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+      });
+      toast.success("Tài khoản của bạn đã sẵn sàng.");
+      navigate(location.state?.redirectTo || "/dashboard");
     } catch (error) {
-      toast.error(error.response?.data?.error || "Failed to register");
+      toast.error(error.response?.data?.error || "Không thể tạo tài khoản.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="auth-layout">
-      <div className="glass-card">
-        <h1 className="auth-title">Create Account</h1>
-        <p className="auth-subtitle">Join us and start booking your perfect stays</p>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">First Name</label>
-              <div className="input-icon-wrapper">
-                <input
-                  type="text"
-                  name="firstName"
-                  className="form-input"
-                  placeholder="John"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  required
-                />
-                <User className="input-icon" />
+    <section className="page-section auth-section">
+      <div className="shell-container auth-shell">
+        <aside className="auth-showcase">
+          <p className="eyebrow">Tạo tài khoản</p>
+          <h1 className="section-title">Tạo tài khoản để đặt Bella nhanh và gọn hơn.</h1>
+          <p className="section-copy">
+            Lưu thông tin một lần để dễ dàng quản lý lưu trú, thanh toán và cập nhật đặt phòng
+            Bella trong cùng một tài khoản.
+          </p>
+          <div className="auth-benefits">
+            <div className="detail-highlight">
+              <BadgeCheck size={18} />
+              <div>
+                <strong>Đặt phòng đỡ lặp lại thông tin</strong>
+                <span>Thông tin của bạn sẽ được gắn với các lần đặt phòng Bella tiếp theo.</span>
               </div>
             </div>
-
-            <div className="form-group">
-              <label className="form-label">Last Name</label>
-              <div className="input-icon-wrapper">
-                <input
-                  type="text"
-                  name="lastName"
-                  className="form-input"
-                  placeholder="Doe"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  required
-                />
-                <User className="input-icon" />
+            <div className="detail-highlight">
+              <CalendarRange size={18} />
+              <div>
+                <strong>Giữ toàn bộ chuyến đi trong một nơi</strong>
+                <span>Xem lại đơn sắp tới và lịch sử đặt phòng bất cứ khi nào bạn cần.</span>
               </div>
             </div>
           </div>
+        </aside>
 
-          <div className="form-group">
-            <label className="form-label">Email Address</label>
-            <div className="input-icon-wrapper">
-              <input
-                type="email"
-                name="email"
-                className="form-input"
-                placeholder="you@example.com"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
-              <Mail className="input-icon" />
+        <div className="auth-card">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Hồ sơ khách lưu trú</p>
+              <h2 className="panel-title">Tạo tài khoản đặt phòng Bella</h2>
+              <p className="auth-card-copy">
+                Điền thông tin bên dưới để bắt đầu đặt và quản lý lưu trú tại Bella.
+              </p>
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Phone Number (Optional)</label>
-            <div className="input-icon-wrapper">
-              <input
-                type="tel"
-                name="phone"
-                className="form-input"
-                placeholder="+1 (555) 000-0000"
-                value={formData.phone}
-                onChange={handleChange}
-              />
-              <Phone className="input-icon" />
+          <form className="form-stack" onSubmit={handleSubmit}>
+            <div className="form-grid">
+              <label className="form-field">
+                <span>Tên</span>
+                <span className="input-shell">
+                  <User size={16} />
+                  <input
+                    type="text"
+                    name="firstName"
+                    placeholder="An"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    aria-invalid={Boolean(errors.firstName)}
+                    required
+                  />
+                </span>
+                {errors.firstName ? (
+                  <span className="field-error">{errors.firstName}</span>
+                ) : null}
+              </label>
+
+              <label className="form-field">
+                <span>Họ</span>
+                <span className="input-shell">
+                  <User size={16} />
+                  <input
+                    type="text"
+                    name="lastName"
+                    placeholder="Nguyễn"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    aria-invalid={Boolean(errors.lastName)}
+                    required
+                  />
+                </span>
+                {errors.lastName ? (
+                  <span className="field-error">{errors.lastName}</span>
+                ) : null}
+              </label>
             </div>
+
+            <label className="form-field">
+              <span>Email</span>
+              <span className="input-shell">
+                <Mail size={16} />
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="tenban@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  aria-invalid={Boolean(errors.email)}
+                  required
+                />
+              </span>
+              {errors.email ? (
+                <span className="field-error">{errors.email}</span>
+              ) : (
+                <span className="field-note">Email này sẽ được dùng để đăng nhập và nhận cập nhật đặt phòng.</span>
+              )}
+            </label>
+
+            <label className="form-field">
+              <span>Số điện thoại</span>
+              <span className="input-shell">
+                <Phone size={16} />
+                <input
+                  type="tel"
+                  name="phone"
+                  placeholder="+84 901 234 567"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  aria-invalid={Boolean(errors.phone)}
+                />
+              </span>
+              {errors.phone ? (
+                <span className="field-error">{errors.phone}</span>
+              ) : (
+                <span className="field-note">Không bắt buộc, nhưng hữu ích khi cần liên hệ về chuyến đi.</span>
+              )}
+            </label>
+
+            <label className="form-field">
+              <span>Mật khẩu</span>
+              <span className="input-shell">
+                <Lock size={16} />
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={handleChange}
+                  aria-invalid={Boolean(errors.password)}
+                  required
+                />
+              </span>
+              {errors.password ? (
+                <span className="field-error">{errors.password}</span>
+              ) : (
+                <span className="field-note">
+                  Hãy chọn mật khẩu có ít nhất 6 ký tự.
+                </span>
+              )}
+            </label>
+
+            <button
+              type="submit"
+              className="button button-primary button-block"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <Activity className="spinner" /> : <UserPlus size={18} />}
+              Tạo tài khoản
+            </button>
+          </form>
+
+          <div className="auth-card-footnote">
+            <BadgeCheck size={16} />
+            <span>Dùng một tài khoản để theo dõi đặt phòng, thanh toán và các chuyến đi sắp tới tại Bella.</span>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Password</label>
-            <div className="input-icon-wrapper">
-              <input
-                type="password"
-                name="password"
-                className="form-input"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={handleChange}
-                required
-              />
-              <Lock className="input-icon" />
-            </div>
-          </div>
-
-          <button type="submit" className="btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <Activity className="animate-spin" />
-            ) : (
-              <UserPlus />
-            )}
-            Sign Up
-          </button>
-        </form>
-
-        <div className="auth-link-container">
-          Already have an account?
-          <Link to="/login" className="auth-link">
-            Sign In
-          </Link>
+          <p className="auth-switch">
+            Đã có tài khoản?{" "}
+            <Link to="/login" className="text-link">
+              Đăng nhập
+            </Link>
+          </p>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

@@ -32,8 +32,3 @@ export {
   connectRedis,
   getRedisClient
 };
-
-module.exports = {
-  connectRedis,
-  getRedisClient
-};

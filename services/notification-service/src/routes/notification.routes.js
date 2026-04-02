@@ -1,6 +1,7 @@
 import express from 'express';
 import Joi from 'joi';
 import { sendEmail } from '../services/email.service.js';
+import { authenticate, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const emailSchema = Joi.object({
 });
 
 // Send custom notification (for testing or admin use)
-router.post('/send', async (req, res) => {
+router.post('/send', authenticate, requireRole("admin"), async (req, res) => {
   try {
     const { error, value } = emailSchema.validate(req.body);
     if (error) {

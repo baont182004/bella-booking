@@ -39,7 +39,7 @@ sleep 30
 # Check backend health
 echo ""
 echo "Checking backend services..."
-BACKEND_HEALTH=$(curl -s http://localhost:3000/health 2>&1)
+BACKEND_HEALTH=$(curl -s http://localhost:3001/health 2>&1)
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}Backend services are healthy${NC}"
 else
@@ -60,10 +60,14 @@ else
     echo "Frontend dependencies already installed"
 fi
 
-# Create .env file if it doesn't exist
+# Create .env file if it doesn't exist and a template is available
 if [ ! -f ".env" ]; then
-    echo "Creating .env file..."
-    cp .env.example .env
+    if [ -f ".env.example" ]; then
+        echo "Creating frontend .env file from .env.example..."
+        cp .env.example .env
+    else
+        echo "No frontend .env.example found. Skipping .env creation because the frontend can use default localhost service URLs."
+    fi
 fi
 
 echo ""
@@ -74,8 +78,7 @@ echo "To start the application:"
 echo "=================================================="
 echo ""
 echo "1. Backend is already running at:"
-echo "   - API Gateway:    http://localhost:3000"
-echo "   - PostgreSQL:     localhost:5432"
+echo "   - User Service:   http://localhost:3001"
 echo "   - Redis:          localhost:6379"
 echo "   - Kafka:          localhost:9092"
 echo ""

@@ -1,85 +1,109 @@
-import { Sequelize, DataTypes, Op } from "sequelize";
+import mongoose from "mongoose";
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || "hotel_db",
-  process.env.DB_USER || "hoteluser",
-  process.env.DB_PASSWORD || "hotelpass",
+const mongoUri =
+  process.env.MONGODB_URI ||
+  "mongodb+srv://<user>:<password>@cluster0.mongodb.net/hotel_db?retryWrites=true&w=majority";
+
+const hotelSchema = new mongoose.Schema(
   {
-    host: process.env.DB_HOST || "localhost",
-    port: parseInt(process.env.DB_PORT) || 5432,
-    dialect: "postgres",
-    logging: process.env.NODE_ENV === "development" ? console.log : false,
-    pool: { max: 20, min: 0, acquire: 30000, idle: 10000 },
+    name: { type: String, required: true },
+    description: { type: String },
+    address: { type: String, required: true },
+    city: { type: String, required: true },
+    country: { type: String, required: true },
+    rating: { type: Number, default: 0 },
+    amenities: { type: [String], default: [] },
+    images: { type: [String], default: [] },
   },
+  { timestamps: true, collection: "hotels" },
 );
 
-// -- Models --------------------------------------------------------------------
-
-export const Hotel = sequelize.define(
-  "Hotel",
+const bedConfigSchema = new mongoose.Schema(
   {
-    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    name: { type: DataTypes.STRING(255), allowNull: false },
-    description: { type: DataTypes.TEXT, allowNull: true },
-    address: { type: DataTypes.TEXT, allowNull: false },
-    city: { type: DataTypes.STRING(100), allowNull: false },
-    country: { type: DataTypes.STRING(100), allowNull: false },
-    rating: { type: DataTypes.DECIMAL(2, 1), defaultValue: 0.0 },
-    amenities: { type: DataTypes.JSONB, allowNull: true },
-    images: { type: DataTypes.JSONB, allowNull: true },
+    type: { type: String, required: true },
+    quantity: { type: Number, required: true },
+    label: { type: String, required: true },
   },
-  {
-    tableName: "hotels",
-    underscored: true,
-    timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-  },
+  { _id: false },
 );
 
-export const Room = sequelize.define(
-  "Room",
+const roomSchema = new mongoose.Schema(
   {
-    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     hotel_id: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: { model: "hotels", key: "id" },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hotel",
+      required: true,
     },
-    room_number: { type: DataTypes.STRING(20), allowNull: false },
-    room_type: { type: DataTypes.STRING(50), allowNull: false },
-    description: { type: DataTypes.TEXT, allowNull: true },
-    price_per_night: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    capacity: { type: DataTypes.INTEGER, allowNull: false },
-    amenities: { type: DataTypes.JSONB, allowNull: true },
-    images: { type: DataTypes.JSONB, allowNull: true },
-    is_available: { type: DataTypes.BOOLEAN, defaultValue: true },
+    code: { type: String },
+    room_number: { type: String, required: true },
+    room_type: { type: String, required: true },
+    description: { type: String },
+    localized_name: {
+      vi: { type: String },
+      en: { type: String, default: null },
+    },
+    category: {
+      type: String,
+      enum: ["room", "studio", "apartment"],
+      default: "room",
+    },
+    summary: { type: String },
+    area_sqm: { type: Number, default: null },
+    bedroom_count: { type: Number, default: 1 },
+    bathroom_count: { type: Number, default: 1 },
+    max_adults: { type: Number, default: null },
+    max_children: { type: Number, default: null },
+    max_occupancy: { type: Number, default: null },
+    bed_configs: { type: [bedConfigSchema], default: [] },
+    spaces: { type: [String], default: [] },
+    views: { type: [String], default: [] },
+    bathroom_features: { type: [String], default: [] },
+    price_per_night: { type: Number, required: true },
+    capacity: { type: Number, required: true },
+    amenities: { type: [String], default: [] },
+    accessibility: {
+      access_modes: { type: [String], default: [] },
+      access_note: { type: String, default: null },
+    },
+    policies: {
+      smoking: {
+        type: String,
+        enum: ["non_smoking", "smoking_allowed", "unknown"],
+        default: "unknown",
+      },
+    },
+    raw_source_name: { type: String },
+    source: {
+      type: {
+        type: String,
+        default: null,
+      },
+      file: { type: String, default: null },
+    },
+    data_warnings: { type: [String], default: [] },
+    is_active: { type: Boolean, default: true },
+    images: { type: [String], default: [] },
+    is_available: { type: Boolean, default: true },
   },
+  { timestamps: true, collection: "rooms" },
+);
+
+roomSchema.index({ hotel_id: 1, room_number: 1 }, { unique: true });
+roomSchema.index(
+  { hotel_id: 1, code: 1 },
   {
-    tableName: "rooms",
-    underscored: true,
-    timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-    indexes: [{ unique: true, fields: ["hotel_id", "room_number"] }],
+    unique: true,
+    partialFilterExpression: { code: { $type: "string" } },
   },
 );
 
-// Associations
-Hotel.hasMany(Room, {
-  foreignKey: "hotel_id",
-  as: "rooms",
-  onDelete: "CASCADE",
-});
-Room.belongsTo(Hotel, { foreignKey: "hotel_id", as: "hotel" });
-
-// -- Helpers -------------------------------------------------------------------
+export const Hotel = mongoose.model("Hotel", hotelSchema);
+export const Room = mongoose.model("Room", roomSchema);
 
 export async function connectDatabase() {
   try {
-    await sequelize.authenticate();
-    console.log("Connected to PostgreSQL via Sequelize");
-    await sequelize.sync({ alter: false });
+    await mongoose.connect(mongoUri);
+    console.log("Connected to MongoDB via Mongoose");
   } catch (error) {
     console.error("Database connection error:", error);
     throw error;
@@ -87,7 +111,8 @@ export async function connectDatabase() {
 }
 
 export async function testConnection() {
-  await sequelize.authenticate();
+  if (mongoose.connection.readyState !== 1) {
+    throw new Error("MongoDB connection not ready");
+  }
+  await mongoose.connection.db.admin().ping();
 }
-
-export { sequelize, Op };

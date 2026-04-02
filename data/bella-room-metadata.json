@@ -1,0 +1,632 @@
+{
+  "roomTypes": [
+    {
+      "code": "garden-family-room",
+      "name": {
+        "vi": "Phòng Gia đình Nhìn ra Vườn",
+        "en": null
+      },
+      "category": "room",
+      "summary": "1 phòng, 30m², 1 giường đơn, 1 giường đôi lớn, nhìn ra vườn, núi và thành phố.",
+      "areaSqm": 30,
+      "bedroomCount": 1,
+      "bathroomCount": 1,
+      "maxAdults": null,
+      "maxChildren": null,
+      "maxOccupancy": null,
+      "bedConfigs": [
+        {
+          "type": "single",
+          "quantity": 1,
+          "label": "1 giường đơn"
+        },
+        {
+          "type": "queen",
+          "quantity": 1,
+          "label": "1 giường đôi lớn"
+        }
+      ],
+      "spaces": [
+        "bedroom"
+      ],
+      "views": [
+        "garden",
+        "mountain",
+        "city"
+      ],
+      "bathroomFeatures": [
+        "private_bathroom",
+        "free_toiletries",
+        "towels",
+        "bidet",
+        "slippers",
+        "toilet",
+        "hairdryer",
+        "toilet_paper",
+        "bath_or_shower"
+      ],
+      "amenities": [
+        "air_conditioning",
+        "safe",
+        "socket_near_bed",
+        "cleaning_products",
+        "hypoallergenic",
+        "tile_marble_floor",
+        "desk",
+        "soundproof",
+        "tv",
+        "refrigerator",
+        "telephone",
+        "pay_tv",
+        "flat_screen_tv",
+        "fan",
+        "electric_kettle",
+        "wardrobe",
+        "clothes_rack",
+        "carbon_monoxide_detector",
+        "individual_ac",
+        "hand_sanitizer"
+      ],
+      "accessibility": {
+        "accessModes": [
+          "elevator",
+          "stairs"
+        ],
+        "accessNote": "Different rooms of this type may be reachable by elevator or stairs only."
+      },
+      "policies": {
+        "smoking": "non_smoking"
+      },
+      "rawSourceName": "Phòng Gia đình Nhìn ra Vườn",
+      "source": {
+        "type": "docx",
+        "file": "TienIch.docx"
+      },
+      "dataWarnings": [
+        "Occupancy limits are not explicitly stated in the source document."
+      ],
+      "isActive": true
+    },
+    {
+      "code": "balcony-twin-room",
+      "name": {
+        "vi": "Phòng 2 giường đơn có ban công",
+        "en": null
+      },
+      "category": "room",
+      "summary": "1 phòng, 30m², 2 giường đơn, có ban công và nhìn ra vườn, thành phố, núi.",
+      "areaSqm": 30,
+      "bedroomCount": 1,
+      "bathroomCount": 1,
+      "maxAdults": null,
+      "maxChildren": null,
+      "maxOccupancy": null,
+      "bedConfigs": [
+        {
+          "type": "single",
+          "quantity": 2,
+          "label": "2 giường đơn"
+        }
+      ],
+      "spaces": [
+        "bedroom",
+        "balcony"
+      ],
+      "views": [
+        "garden",
+        "city",
+        "mountain"
+      ],
+      "bathroomFeatures": [
+        "private_bathroom",
+        "free_toiletries",
+        "towels",
+        "bidet",
+        "slippers",
+        "toilet",
+        "hairdryer",
+        "toilet_paper",
+        "bath_or_shower"
+      ],
+      "amenities": [
+        "air_conditioning",
+        "safe",
+        "socket_near_bed",
+        "cleaning_products",
+        "hypoallergenic",
+        "tile_marble_floor",
+        "desk",
+        "soundproof",
+        "tv",
+        "refrigerator",
+        "telephone",
+        "pay_tv",
+        "flat_screen_tv",
+        "electric_kettle",
+        "wardrobe",
+        "clothes_rack",
+        "carbon_monoxide_detector",
+        "individual_ac",
+        "hand_sanitizer"
+      ],
+      "accessibility": {
+        "accessModes": [
+          "elevator",
+          "stairs"
+        ],
+        "accessNote": "Different rooms of this type may be reachable by elevator or stairs only."
+      },
+      "policies": {
+        "smoking": "non_smoking"
+      },
+      "rawSourceName": "Phòng 2 giường đơn có ban công",
+      "source": {
+        "type": "docx",
+        "file": "TienIch.docx"
+      },
+      "dataWarnings": [
+        "Occupancy limits are not explicitly stated in the source document."
+      ],
+      "isActive": true
+    },
+    {
+      "code": "sea-view-double-or-twin-room",
+      "name": {
+        "vi": "Phòng giường đôi/2 giường đơn nhìn ra biển",
+        "en": null
+      },
+      "category": "room",
+      "summary": "1 phòng, 30m², 2 giường đơn hoặc 1 giường đôi cực lớn, nhìn ra biển, vườn và thành phố.",
+      "areaSqm": 30,
+      "bedroomCount": 1,
+      "bathroomCount": 1,
+      "maxAdults": null,
+      "maxChildren": null,
+      "maxOccupancy": null,
+      "bedConfigs": [
+        {
+          "type": "single",
+          "quantity": 2,
+          "label": "2 giường đơn"
+        },
+        {
+          "type": "extra_large_double",
+          "quantity": 1,
+          "label": "1 giường đôi cực lớn"
+        }
+      ],
+      "spaces": [
+        "bedroom"
+      ],
+      "views": [
+        "sea",
+        "garden",
+        "city"
+      ],
+      "bathroomFeatures": [
+        "private_bathroom",
+        "free_toiletries",
+        "towels",
+        "bidet",
+        "slippers",
+        "toilet",
+        "hairdryer",
+        "toilet_paper",
+        "bath_or_shower"
+      ],
+      "amenities": [
+        "air_conditioning",
+        "safe",
+        "socket_near_bed",
+        "cleaning_products",
+        "hypoallergenic",
+        "tile_marble_floor",
+        "desk",
+        "soundproof",
+        "tv",
+        "refrigerator",
+        "telephone",
+        "pay_tv",
+        "flat_screen_tv",
+        "fan",
+        "electric_kettle",
+        "wardrobe",
+        "clothes_rack",
+        "carbon_monoxide_detector",
+        "individual_ac",
+        "hand_sanitizer"
+      ],
+      "accessibility": {
+        "accessModes": [
+          "elevator",
+          "stairs"
+        ],
+        "accessNote": "Different rooms of this type may be reachable by elevator or stairs only."
+      },
+      "policies": {
+        "smoking": "non_smoking"
+      },
+      "rawSourceName": "Phòng giường đôi/2 giường đơn nhìn ra biển",
+      "source": {
+        "type": "docx",
+        "file": "TienIch.docx"
+      },
+      "dataWarnings": [
+        "Sea view is inferred from the room title; the body text repeats garden and city views but does not clearly repeat sea view.",
+        "Occupancy limits are not explicitly stated in the source document."
+      ],
+      "isActive": true
+    },
+    {
+      "code": "sea-view-studio",
+      "name": {
+        "vi": "Studio nhìn ra biển",
+        "en": null
+      },
+      "category": "studio",
+      "summary": "1 studio nguyên căn, 28m², 1 giường đôi lớn, có bếp nhỏ riêng và nhìn ra biển.",
+      "areaSqm": 28,
+      "bedroomCount": 0,
+      "bathroomCount": 1,
+      "maxAdults": null,
+      "maxChildren": null,
+      "maxOccupancy": null,
+      "bedConfigs": [
+        {
+          "type": "queen",
+          "quantity": 1,
+          "label": "1 giường đôi lớn"
+        }
+      ],
+      "spaces": [
+        "bedroom",
+        "kitchen"
+      ],
+      "views": [
+        "sea"
+      ],
+      "bathroomFeatures": [
+        "private_bathroom",
+        "free_toiletries",
+        "towels",
+        "bidet",
+        "slippers",
+        "toilet",
+        "hairdryer",
+        "toilet_paper",
+        "bath_or_shower"
+      ],
+      "amenities": [
+        "air_conditioning",
+        "safe",
+        "sofa",
+        "socket_near_bed",
+        "cleaning_products",
+        "hypoallergenic",
+        "tile_marble_floor",
+        "desk",
+        "soundproof",
+        "tv",
+        "refrigerator",
+        "telephone",
+        "pay_tv",
+        "flat_screen_tv",
+        "microwave",
+        "kitchenette",
+        "kitchenware",
+        "fan",
+        "electric_kettle",
+        "wardrobe",
+        "clothes_rack",
+        "carbon_monoxide_detector",
+        "individual_ac",
+        "hand_sanitizer"
+      ],
+      "accessibility": {
+        "accessModes": [
+          "elevator",
+          "stairs"
+        ],
+        "accessNote": "Different rooms of this type may be reachable by elevator or stairs only."
+      },
+      "policies": {
+        "smoking": "non_smoking"
+      },
+      "rawSourceName": "Studio nhìn ra biển",
+      "source": {
+        "type": "docx",
+        "file": "TienIch.docx"
+      },
+      "dataWarnings": [
+        "Occupancy limits are not explicitly stated in the source document."
+      ],
+      "isActive": true
+    },
+    {
+      "code": "side-sea-view-deluxe-double-room",
+      "name": {
+        "vi": "Phòng Deluxe giường đôi nhìn ra biển từ phía bên cạnh",
+        "en": null
+      },
+      "category": "room",
+      "summary": "1 phòng, 28m², 1 giường đôi lớn, nhìn ra biển từ phía bên cạnh và ra khung cảnh.",
+      "areaSqm": 28,
+      "bedroomCount": 1,
+      "bathroomCount": 1,
+      "maxAdults": null,
+      "maxChildren": null,
+      "maxOccupancy": null,
+      "bedConfigs": [
+        {
+          "type": "queen",
+          "quantity": 1,
+          "label": "1 giường đôi lớn"
+        }
+      ],
+      "spaces": [
+        "bedroom"
+      ],
+      "views": [
+        "side_sea",
+        "landmark"
+      ],
+      "bathroomFeatures": [
+        "private_bathroom",
+        "free_toiletries",
+        "towels",
+        "bidet",
+        "slippers",
+        "toilet",
+        "hairdryer",
+        "toilet_paper",
+        "bath_or_shower"
+      ],
+      "amenities": [
+        "air_conditioning",
+        "safe",
+        "sofa",
+        "socket_near_bed",
+        "cleaning_products",
+        "hypoallergenic",
+        "tile_marble_floor",
+        "desk",
+        "soundproof",
+        "tv",
+        "refrigerator",
+        "telephone",
+        "pay_tv",
+        "flat_screen_tv",
+        "fan",
+        "electric_kettle",
+        "wardrobe",
+        "clothes_rack",
+        "carbon_monoxide_detector",
+        "individual_ac",
+        "hand_sanitizer"
+      ],
+      "accessibility": {
+        "accessModes": [
+          "elevator",
+          "stairs"
+        ],
+        "accessNote": "Different rooms of this type may be reachable by elevator or stairs only."
+      },
+      "policies": {
+        "smoking": "non_smoking"
+      },
+      "rawSourceName": "Phòng Deluxe giường đôi nhìn ra biển từ phía bên cạnh",
+      "source": {
+        "type": "docx",
+        "file": "TienIch.docx"
+      },
+      "dataWarnings": [
+        "Side sea view is inferred from the room title; the body text only states a scenic view.",
+        "Occupancy limits are not explicitly stated in the source document."
+      ],
+      "isActive": true
+    },
+    {
+      "code": "two-bedroom-sea-view-apartment",
+      "name": {
+        "vi": "Căn hộ 2 phòng ngủ nhìn ra biển",
+        "en": null
+      },
+      "category": "apartment",
+      "summary": "1 căn hộ nguyên căn, 96m², 2 phòng ngủ, phòng khách có 2 giường sofa, có bếp riêng, ban công, nhìn ra biển và núi.",
+      "areaSqm": 96,
+      "bedroomCount": 2,
+      "bathroomCount": 1,
+      "maxAdults": null,
+      "maxChildren": null,
+      "maxOccupancy": null,
+      "bedConfigs": [
+        {
+          "type": "single",
+          "quantity": 2,
+          "label": "Phòng ngủ 1: 2 giường đơn"
+        },
+        {
+          "type": "extra_large_double",
+          "quantity": 1,
+          "label": "Phòng ngủ 2: 1 giường đôi cực lớn"
+        },
+        {
+          "type": "sofa_bed",
+          "quantity": 2,
+          "label": "Phòng khách: 2 giường sofa"
+        }
+      ],
+      "spaces": [
+        "bedroom",
+        "living_room",
+        "kitchen",
+        "balcony"
+      ],
+      "views": [
+        "sea",
+        "mountain"
+      ],
+      "bathroomFeatures": [
+        "private_bathroom",
+        "free_toiletries",
+        "towels",
+        "bidet",
+        "slippers",
+        "toilet",
+        "hairdryer",
+        "toilet_paper",
+        "bath_or_shower"
+      ],
+      "amenities": [
+        "air_conditioning",
+        "kitchen",
+        "safe",
+        "sofa",
+        "socket_near_bed",
+        "cleaning_products",
+        "hypoallergenic",
+        "tile_marble_floor",
+        "desk",
+        "seating_area",
+        "soundproof",
+        "tv",
+        "refrigerator",
+        "telephone",
+        "pay_tv",
+        "flat_screen_tv",
+        "microwave",
+        "kitchenette",
+        "kitchenware",
+        "fan",
+        "electric_kettle",
+        "wardrobe",
+        "dining_area",
+        "dining_table",
+        "clothes_rack",
+        "interconnected_room",
+        "carbon_monoxide_detector",
+        "individual_ac",
+        "hand_sanitizer"
+      ],
+      "accessibility": {
+        "accessModes": [
+          "elevator",
+          "stairs"
+        ],
+        "accessNote": "Different rooms of this type may be reachable by elevator or stairs only."
+      },
+      "policies": {
+        "smoking": "non_smoking"
+      },
+      "rawSourceName": "Căn hộ 2 phòng ngủ nhìn ra biển",
+      "source": {
+        "type": "docx",
+        "file": "TienIch.docx"
+      },
+      "dataWarnings": [
+        "Bathroom count is not explicitly stated in the source document; a safe default of 1 is retained.",
+        "Occupancy limits are not explicitly stated in the source document."
+      ],
+      "isActive": true
+    }
+  ],
+  "hotelAmenities": [
+    "Phòng tắm riêng",
+    "Chỗ đỗ xe miễn phí",
+    "Wifi miễn phí",
+    "Điều hòa không khí",
+    "Chỗ đỗ xe",
+    "Khu vực picnic",
+    "TV màn hình phẳng",
+    "Tầm nhìn ra khung cảnh",
+    "Phòng gia đình",
+    "Xe đưa đón sân bay",
+    "Giấy vệ sinh",
+    "Khăn tắm",
+    "Chậu rửa vệ sinh (bidet)",
+    "Bồn tắm hoặc vòi sen",
+    "Dép",
+    "Nhà vệ sinh",
+    "Đồ vệ sinh cá nhân miễn phí",
+    "Máy sấy tóc",
+    "Vòi sen",
+    "Ra trải giường",
+    "Tủ hoặc phòng để quần áo",
+    "Bàn ghế ngoài trời",
+    "Tiện nghi BBQ (phụ phí)",
+    "Sân vườn",
+    "Cho thuê xe đạp (phụ phí)",
+    "Biểu diễn/nhạc sống",
+    "Giờ vàng",
+    "Tour đi xe đạp (phụ phí)",
+    "Tour đi bộ",
+    "Giải trí buổi tối",
+    "Xe đạp (ngoài khuôn viên)",
+    "Sân golf (trong vòng 3km) (phụ phí)",
+    "Bàn làm việc",
+    "Điện thoại",
+    "Truyền hình trả tiền",
+    "Quán cà phê (trong khuôn viên)",
+    "Rượu vang/sâm panh (phụ phí)",
+    "Thực đơn ăn kiêng đặc biệt (theo yêu cầu)",
+    "Quầy bar (đồ ăn nhẹ)",
+    "Có chỗ đỗ xe công cộng miễn phí tại chỗ (không cần đặt trước)",
+    "Chỗ đậu xe ngoài đường",
+    "Có xuất hóa đơn",
+    "Nhận/trả phòng riêng",
+    "Giữ hành lý",
+    "Bàn bán tour",
+    "Nhận/trả phòng cấp tốc",
+    "Lễ tân 24 giờ",
+    "Dọn phòng hàng ngày",
+    "Bàn ủi li quần",
+    "Dịch vụ giặt ủi (phụ phí)",
+    "Giặt khô (phụ phí)",
+    "Fax/photocopy",
+    "Bình chữa cháy",
+    "Hệ thống CCTV bên ngoài chỗ nghỉ",
+    "Hệ thống CCTV trong khu vực chung",
+    "Thiết bị báo cháy",
+    "Ổ khóa mở bằng thẻ",
+    "Ổ khóa",
+    "Bảo vệ 24/7",
+    "Két an toàn",
+    "Dịch vụ đưa đón",
+    "Thiết bị báo carbon monoxide",
+    "Giao nhận đồ tạp hóa (phụ phí)",
+    "Cửa hàng tạp hóa (trong khuôn viên)",
+    "Khu vực xem TV/sảnh chung",
+    "Không gây dị ứng",
+    "Khu vực cho phép hút thuốc",
+    "Điều hòa nhiệt độ",
+    "Phòng không gây dị ứng",
+    "Sàn lát gạch/đá cẩm thạch",
+    "Hệ thống cách âm",
+    "Cho thuê xe hơi",
+    "Phòng cách âm",
+    "Thang máy",
+    "Quạt máy",
+    "Hiệu cắt tóc/làm đẹp",
+    "Xe đưa đón sân bay (phụ phí)",
+    "Phòng không hút thuốc",
+    "Dịch vụ phòng",
+    "Sản phẩm lau rửa",
+    "Ấm đun nước điện",
+    "Tủ lạnh",
+    "Cửa an toàn cho trẻ nhỏ",
+    "Lối vào dành cho người khuyết tật",
+    "Các tầng trên chỉ lên được bằng cầu thang",
+    "Các tầng trên đi lên bằng thang máy",
+    "Ổ điện gần giường",
+    "Giá treo quần áo",
+    "TV",
+    "Đêm phim (phụ phí)",
+    "Lặn với ống thở (phụ phí)",
+    "Ca-nô (phụ phí, ngoài khuôn viên)",
+    "Câu cá (phụ phí, ngoài khuôn viên)",
+    "Ô (dù) che nắng loại to (phụ phí)",
+    "Ghế/ghế dài tắm nắng (phụ phí)",
+    "Tiếng Anh",
+    "Tiếng Việt"
+  ]
+}

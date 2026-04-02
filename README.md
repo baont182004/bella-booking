@@ -6,7 +6,6 @@ A complete hotel booking system with microservices backend and modern React fron
 
 ### Backend (Microservices)
 
-- **API Gateway** (Port 3000) - Single entry point for all client requests
 - **User Service** (Port 3001) - User authentication and management
 - **Hotel Service** (Port 3002) - Hotel and room management
 - **Booking Service** (Port 3003) - Reservation handling
@@ -15,11 +14,11 @@ A complete hotel booking system with microservices backend and modern React fron
 
 ### Frontend
 
-- **React App** (Port 5173) - Modern SPA with Vite, Tailwind CSS
+- **React App** (Port 5173) - Modern SPA with Vite, React Router, and plain CSS
 
 ### Infrastructure
 
-- **PostgreSQL** (Port 5432) - Primary database
+- **MongoDB Atlas** - Primary database
 - **Redis** (Port 6379) - Caching layer
 - **Kafka + Zookeeper** (Ports 9092, 2181) - Event streaming
 
@@ -61,8 +60,7 @@ npm run dev
 **1. Start Backend Services**
 
 ```bash
-# Configure environment
-cp .env.example .env
+# Configure the root .env file first
 
 # Start all backend services
 docker-compose up -d
@@ -83,15 +81,13 @@ npm run dev
 ### 🌐 Access the Application
 
 - **Frontend**: http://localhost:5173
-- **API Gateway**: http://localhost:3000
-- **API Documentation**: See [QUICKSTART.md](QUICKSTART.md)
+- **API Documentation**: See [docs/QUICKSTART.md](docs/QUICKSTART.md)
 
 ## 📖 Documentation
 
-- **[Quick Start Guide](QUICKSTART.md)** - Get started quickly with API testing
-- **[Architecture Documentation](ARCHITECTURE.md)** - Detailed system architecture
-- **[Frontend README](frontend/README.md)** - Frontend setup and features
-- **[Postman Collection](postman-collection.json)** - API testing collection
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Local run, seed, and API examples
+- **[Architecture Documentation](docs/ARCHITECTURE.md)** - Service topology and runtime notes
+- **[PowerShell Windows Checklist](docs/POWERSHELL_WINDOWS_CHECKLIST.md)** - Windows-specific run and debug steps
 
 ## 🎯 User Flow
 
@@ -141,7 +137,7 @@ npm install
 npm run dev
 ```
 
-The frontend will proxy API requests to `http://localhost:3000`
+The frontend calls backend services directly. Configure the base URL in the frontend context if needed.
 
 ### Viewing Logs
 
@@ -162,22 +158,21 @@ cd frontend && npm run dev
 
 - **Runtime**: Node.js 18
 - **Framework**: Express.js
-- **Database**: PostgreSQL 15
+- **Database**: MongoDB Atlas
 - **Cache**: Redis 7
 - **Message Broker**: Apache Kafka 7.5
 - **Authentication**: JWT (jsonwebtoken)
-- \*📁 Project Structure
+### Project Structure
 
 ```
 adv-backend/
-├-- services/                    # Backend microservices
-│   ├-- api-gateway/            # API Gateway service
+├-- services/                   # Backend microservices
 │   ├-- user-service/           # User & Auth service
 │   ├-- hotel-service/          # Hotel management
 │   ├-- booking-service/        # Booking management
 │   ├-- payment-service/        # Payment processing
 │   └-- notification-service/   # Email notifications
-├-- frontend/                    # React frontend
+├-- frontend/                   # React + Vite frontend
 │   ├-- src/
 │   │   ├-- components/         # Reusable components
 │   │   ├-- pages/              # Page components
@@ -185,34 +180,19 @@ adv-backend/
 │   │   └-- services/           # API services
 │   ├-- public/
 │   └-- package.json
+├-- data/                       # Bella metadata and normalized content
+├-- docs/                       # Project documentation
+├-- scripts/                    # Seed and sync scripts
 ├-- docker-compose.yml          # Docker services config
-├-- init-db.sql                 # Database initialization
 ├-- setup.sh                    # Automated setup script
 ├-- start.sh                    # Backend startup script
 ├-- .env                        # Environment variables
-├-- QUICKSTART.md              # Quick start guide
-├-- ARCHITECTURE.md            # Architecture docs
 └-- README.md                  # This file
 ```
 
-adv-backend/
-├-- services/
-│ ├-- api-gateway/
-│ ├-- user-service/
-│ ├-- hotel-service/
-│ ├-- booking-service/
-│ ├-- payment-service/
-│ └-- notification-service/
-├-- docker-compose.yml
-├-- init-db.sql
-├-- .env
-└-- README.md
-
-````
-
 ## Service Communication
 
-- **Synchronous**: REST APIs via API Gateway
+- **Synchronous**: REST APIs via direct service endpoints
 - **Asynchronous**: Kafka events for booking confirmations, payments, and notifications
 
 ## Kafka Topics
@@ -226,15 +206,14 @@ adv-backend/
 
 ```bash
 # Run tests for all services
-docker-compose exec api-gateway npm test
 docker-compose exec user-service npm test
 # ... repeat for other services
-````
+```
 
 ## Monitoring
 
 - View logs: `docker-compose logs -f [service-name]`
-- PostgreSQL: Access via `localhost:5432`
+- MongoDB Atlas: Access via your Atlas connection string
 - Redis: Access via `localhost:6379`
 - Kafka: Access via `localhost:9092`
 
@@ -255,6 +234,3 @@ docker-compose exec user-service npm test
 4. Push to the branch
 5. Create a Pull Request
 
-## License
-
-MIT License

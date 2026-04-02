@@ -1,73 +1,86 @@
-import { Sequelize, DataTypes } from "sequelize";
+import mongoose from "mongoose";
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || "hotel_db",
-  process.env.DB_USER || "hoteluser",
-  process.env.DB_PASSWORD || "hotelpass",
+const mongoUri =
+  process.env.MONGODB_URI ||
+  "mongodb+srv://<user>:<password>@cluster0.mongodb.net/hotel_db?retryWrites=true&w=majority";
+
+const hotelSchema = new mongoose.Schema(
   {
-    host: process.env.DB_HOST || "localhost",
-    port: parseInt(process.env.DB_PORT) || 5432,
-    dialect: "postgres",
-    logging: process.env.NODE_ENV === "development" ? console.log : false,
-    pool: { max: 20, min: 0, acquire: 30000, idle: 10000 },
+    name: { type: String, required: true },
+    address: { type: String },
+    city: { type: String, required: true },
+    country: { type: String, required: true },
   },
+  { timestamps: true, collection: "hotels" },
 );
 
-// -- Models --------------------------------------------------------------------
-
-export const Booking = sequelize.define(
-  "Booking",
+const roomSchema = new mongoose.Schema(
   {
-    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    user_id: { type: DataTypes.INTEGER, allowNull: false },
-    room_id: { type: DataTypes.INTEGER, allowNull: false },
-    total_price: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    status: { type: DataTypes.STRING(20), defaultValue: "pending" },
-  },
-  {
-    tableName: "bookings",
-    underscored: true,
-    timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-  },
-);
-
-export const Payment = sequelize.define(
-  "Payment",
-  {
-    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    booking_id: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      unique: true,
-      references: { model: "bookings", key: "id" },
+    hotel_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hotel",
+      required: true,
     },
-    amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    payment_method: { type: DataTypes.STRING(50), allowNull: false },
-    payment_status: { type: DataTypes.STRING(20), defaultValue: "pending" },
-    transaction_id: { type: DataTypes.STRING(255), unique: true },
-    payment_date: { type: DataTypes.DATE, allowNull: true },
+    room_number: { type: String, required: true },
+    room_type: { type: String, required: true },
+    price_per_night: { type: Number, required: true },
+    capacity: { type: Number, required: true },
+    is_available: { type: Boolean, default: true },
   },
-  {
-    tableName: "payments",
-    underscored: true,
-    timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-  },
+  { timestamps: true, collection: "rooms" },
 );
 
-Booking.hasOne(Payment, { foreignKey: "booking_id", as: "payment" });
-Payment.belongsTo(Booking, { foreignKey: "booking_id", as: "booking" });
+const bookingSchema = new mongoose.Schema(
+  {
+    user_id: { type: String, required: true },
+    room_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Room",
+      required: true,
+    },
+    total_price: { type: Number, required: true, min: 0 },
+    status: {
+      type: String,
+      enum: ["pending", "confirmed", "cancelled", "completed"],
+      default: "pending",
+    },
+  },
+  { timestamps: true, collection: "bookings" },
+);
 
-// -- Helpers -------------------------------------------------------------------
+const paymentSchema = new mongoose.Schema(
+  {
+    booking_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      unique: true,
+    },
+    amount: { type: Number, required: true, min: 0 },
+    payment_method: {
+      type: String,
+      enum: ["pending", "credit_card", "debit_card"],
+      required: true,
+    },
+    payment_status: {
+      type: String,
+      enum: ["pending", "completed", "refunded"],
+      default: "pending",
+    },
+    transaction_id: { type: String, unique: true, sparse: true },
+    payment_date: { type: Date },
+  },
+  { timestamps: true, collection: "payments" },
+);
+
+export const Hotel = mongoose.model("Hotel", hotelSchema);
+export const Room = mongoose.model("Room", roomSchema);
+export const Booking = mongoose.model("Booking", bookingSchema);
+export const Payment = mongoose.model("Payment", paymentSchema);
 
 export async function connectDatabase() {
   try {
-    await sequelize.authenticate();
-    console.log("Connected to PostgreSQL via Sequelize");
-    await sequelize.sync({ alter: false });
+    await mongoose.connect(mongoUri);
+    console.log("Connected to MongoDB via Mongoose");
   } catch (error) {
     console.error("Database connection error:", error);
     throw error;
@@ -75,7 +88,8 @@ export async function connectDatabase() {
 }
 
 export async function testConnection() {
-  await sequelize.authenticate();
+  if (mongoose.connection.readyState !== 1) {
+    throw new Error("MongoDB connection not ready");
+  }
+  await mongoose.connection.db.admin().ping();
 }
-
-export { sequelize };

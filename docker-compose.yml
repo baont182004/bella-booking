@@ -1,26 +1,4 @@
-version: "3.8"
-
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: hotel-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-hoteluser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hotelpass}
-      POSTGRES_DB: hotel_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - hotel-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hoteluser"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Redis Cache
   redis:
     image: redis:7-alpine
@@ -78,30 +56,6 @@ services:
       timeout: 10s
       retries: 5
 
-  # API Gateway
-  api-gateway:
-    build:
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
-    container_name: hotel-api-gateway
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-      - USER_SERVICE_URL=http://user-service:3001
-      - HOTEL_SERVICE_URL=http://hotel-service:3002
-      - BOOKING_SERVICE_URL=http://booking-service:3003
-      - PAYMENT_SERVICE_URL=http://payment-service:3004
-    depends_on:
-      - user-service
-      - hotel-service
-      - booking-service
-    networks:
-      - hotel-network
-    volumes:
-      - ./services/api-gateway:/app
-      - /app/node_modules
-
   # User Service
   user-service:
     build:
@@ -112,17 +66,11 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:-hoteluser}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-hotelpass}
-      - DB_NAME=hotel_db
+      - MONGODB_URI=${MONGODB_URI}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -141,22 +89,18 @@ services:
       - "3002:3002"
     environment:
       - PORT=3002
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:-hoteluser}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-hotelpass}
-      - DB_NAME=hotel_db
+      - MONGODB_URI=${MONGODB_URI}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - hotel-network
     volumes:
       - ./services/hotel-service:/app
+      - ./data:/app/data:ro
       - /app/node_modules
 
   # Booking Service
@@ -169,17 +113,12 @@ services:
       - "3003:3003"
     environment:
       - PORT=3003
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:-hoteluser}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-hotelpass}
-      - DB_NAME=hotel_db
+      - MONGODB_URI=${MONGODB_URI}
       - KAFKA_BROKER=kafka:9092
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
     depends_on:
-      postgres:
-        condition: service_healthy
       kafka:
         condition: service_healthy
       redis:
@@ -200,15 +139,10 @@ services:
       - "3004:3004"
     environment:
       - PORT=3004
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:-hoteluser}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-hotelpass}
-      - DB_NAME=hotel_db
+      - MONGODB_URI=${MONGODB_URI}
       - KAFKA_BROKER=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
     depends_on:
-      postgres:
-        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
@@ -228,6 +162,7 @@ services:
     environment:
       - PORT=3005
       - KAFKA_BROKER=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-your-email@gmail.com}
@@ -246,5 +181,4 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
   redis_data:

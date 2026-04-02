@@ -55,9 +55,8 @@ async function handleBookingCreated(booking) {
   console.log("Processing booking created event:", booking);
 
   try {
-    // Check if payment already exists for this booking
     const existingPayment = await Payment.findOne({
-      where: { booking_id: booking.id },
+      booking_id: booking.id,
     });
 
     if (existingPayment) {
@@ -65,22 +64,23 @@ async function handleBookingCreated(booking) {
       return;
     }
 
-    // Create a pending payment record
     const payment = await Payment.create({
       booking_id: booking.id,
       amount: booking.totalPrice,
       payment_method: "pending",
       payment_status: "pending",
+      transaction_id: `PENDING-${booking.id}`,
     });
 
-    console.log("Payment record created:", payment.toJSON());
+    console.log("Payment record created:", payment.toObject());
 
-    // Publish notification event
     await publishEvent("notification-request", {
       type: "booking-created",
       userId: booking.userId,
       bookingId: booking.id,
-      message: `Your booking has been created. Total amount: $${booking.totalPrice}`,
+      totalPrice: booking.totalPrice,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

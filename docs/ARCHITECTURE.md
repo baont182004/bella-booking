@@ -9,7 +9,7 @@ This is a production-ready hotel booking backend built with microservices archit
 ### Backend Services
 - **Node.js 18+** - Runtime environment
 - **Express.js** - Web framework for all services
-- **PostgreSQL** - Primary relational database
+- **MongoDB Atlas** - Primary document database
 - **Redis** - Caching and session storage
 - **Apache Kafka** - Event streaming and inter-service communication
 - **Docker & Docker Compose** - Containerization and orchestration
@@ -20,7 +20,7 @@ This is a production-ready hotel booking backend built with microservices archit
 - **joi** - Request validation
 - **kafkajs** - Kafka client for Node.js
 - **nodemailer** - Email notifications
-- **pg** - PostgreSQL client
+- **mongoose** - MongoDB ODM
 - **redis** - Redis client
 - **helmet** - Security headers
 - **cors** - CORS middleware
@@ -28,23 +28,7 @@ This is a production-ready hotel booking backend built with microservices archit
 
 ## Microservices Architecture
 
-### 1. API Gateway (Port 3000)
-**Purpose**: Single entry point for all client requests
-
-**Features**:
-- Request routing to appropriate services
-- Rate limiting
-- Request/response logging
-- Error handling
-
-**Routes**:
-- `/api/auth/*` → User Service
-- `/api/users/*` → User Service
-- `/api/hotels/*` → Hotel Service
-- `/api/bookings/*` → Booking Service
-- `/api/payments/*` → Payment Service
-
-### 2. User Service (Port 3001)
+### 1. User Service (Port 3001)
 **Purpose**: User authentication and management
 
 **Features**:
@@ -62,7 +46,7 @@ This is a production-ready hotel booking backend built with microservices archit
 - `GET /users/profile` - Get user profile (protected)
 - `PUT /users/profile` - Update user profile (protected)
 
-### 3. Hotel Service (Port 3002)
+### 2. Hotel Service (Port 3002)
 **Purpose**: Hotel and room management
 
 **Features**:
@@ -87,7 +71,7 @@ This is a production-ready hotel booking backend built with microservices archit
 - Room availability cached with TTL
 - Cache invalidation on updates
 
-### 4. Booking Service (Port 3003)
+### 3. Booking Service (Port 3003)
 **Purpose**: Reservation management
 
 **Features**:
@@ -111,7 +95,7 @@ This is a production-ready hotel booking backend built with microservices archit
 - `booking-status-updated`
 - `booking-cancelled`
 
-### 5. Payment Service (Port 3004)
+### 4. Payment Service (Port 3004)
 **Purpose**: Payment processing
 
 **Features**:
@@ -133,7 +117,7 @@ This is a production-ready hotel booking backend built with microservices archit
 - **Consumes**: `booking-created`
 - **Publishes**: `payment-processed`, `payment-refunded`, `notification-request`
 
-### 6. Notification Service (Port 3005)
+### 5. Notification Service (Port 3005)
 **Purpose**: Email and SMS notifications
 
 **Features**:
@@ -155,11 +139,11 @@ This is a production-ready hotel booking backend built with microservices archit
 
 ## Infrastructure Components
 
-### PostgreSQL (Port 5432)
+### MongoDB Atlas
 **Purpose**: Primary database for all services
 
-**Database Schema**:
-```sql
+**Collections**:
+```
 - users (authentication and user data)
 - hotels (hotel information)
 - rooms (room inventory)
@@ -169,10 +153,9 @@ This is a production-ready hotel booking backend built with microservices archit
 ```
 
 **Features**:
-- ACID compliance
-- Foreign key constraints
-- Indexes for performance
-- Connection pooling
+- Document-based schema
+- Flexible indexes
+- Managed backups (Atlas)
 
 ### Redis (Port 6379)
 **Purpose**: Caching and session storage
@@ -207,7 +190,7 @@ This is a production-ready hotel booking backend built with microservices archit
 
 ### 1. Complete Booking Flow
 ```
-1. Client → API Gateway → Booking Service
+1. Client → Booking Service
 2. Booking Service creates booking in DB
 3. Booking Service publishes to Kafka: booking-created
 4. Payment Service consumes event, creates payment record
@@ -217,7 +200,7 @@ This is a production-ready hotel booking backend built with microservices archit
 
 ### 2. Payment Processing Flow
 ```
-1. Client → API Gateway → Payment Service
+1. Client → Payment Service
 2. Payment Service validates booking
 3. Payment Service processes payment (simulated)
 4. Payment Service updates booking status to "confirmed"
@@ -227,7 +210,7 @@ This is a production-ready hotel booking backend built with microservices archit
 
 ### 3. Booking Cancellation Flow
 ```
-1. Client → API Gateway → Booking Service
+1. Client → Booking Service
 2. Booking Service updates status to "cancelled"
 3. Booking Service publishes: booking-cancelled
 4. Notification Service sends cancellation email
@@ -316,11 +299,8 @@ docker-compose down
 
 ### Testing
 ```bash
-# Use Postman collection
-# Import postman-collection.json
-
-# Or use cURL commands
-# See QUICKSTART.md
+# Use the cURL examples in QUICKSTART.md
+# or build your own Postman requests from the live endpoints
 ```
 
 ## Deployment Considerations
@@ -387,7 +367,7 @@ For production, consider:
 - Review logs: `docker-compose logs`
 
 **Database connection errors**:
-- Wait for PostgreSQL to be fully initialized
+- Wait for MongoDB connection to be ready
 - Check connection credentials
 - Verify network connectivity
 
@@ -408,6 +388,3 @@ For issues or questions:
 3. Check service health endpoints
 4. Review architecture documentation
 
-## License
-
-MIT License - See LICENSE file for details
