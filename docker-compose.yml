@@ -81,12 +81,14 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
-      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-mongodb://mongo:27017/bella_hotel}}
+      - MONGO_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-12h}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+      - CORS_ORIGINS=${CORS_ORIGINS:-${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
+      - CORS_ORIGIN=${CORS_ORIGIN:-${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
       - TRUST_PROXY=${TRUST_PROXY:-1}
     depends_on:
       mongo:
@@ -109,11 +111,13 @@ services:
       - "3002:3002"
     environment:
       - PORT=3002
-      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-mongodb://mongo:27017/bella_hotel}}
+      - MONGO_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+      - CORS_ORIGINS=${CORS_ORIGINS:-${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
+      - CORS_ORIGIN=${CORS_ORIGIN:-${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
       - TRUST_PROXY=${TRUST_PROXY:-1}
     depends_on:
       mongo:
@@ -137,12 +141,15 @@ services:
       - "3003:3003"
     environment:
       - PORT=3003
-      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-mongodb://mongo:27017/bella_hotel}}
+      - MONGO_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_BROKER=kafka:9092
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+      - CORS_ORIGINS=${CORS_ORIGINS:-${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
+      - CORS_ORIGIN=${CORS_ORIGIN:-${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
       - TRUST_PROXY=${TRUST_PROXY:-1}
       - PAYMENT_HOLD_WINDOW_MINUTES=${PAYMENT_HOLD_WINDOW_MINUTES:-30}
       - MONGODB_TRANSACTIONS_ENABLED=${MONGODB_TRANSACTIONS_ENABLED:-false}
@@ -169,12 +176,15 @@ services:
       - "3004:3004"
     environment:
       - PORT=3004
-      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-mongodb://mongo:27017/bella_hotel}}
+      - MONGO_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_BROKER=kafka:9092
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+      - CORS_ORIGINS=${CORS_ORIGINS:-${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
+      - CORS_ORIGIN=${CORS_ORIGIN:-${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
       - TRUST_PROXY=${TRUST_PROXY:-1}
       - PAYMENT_PROVIDER=${PAYMENT_PROVIDER:-mock}
       - PAYMENT_PUBLIC_BASE_URL=${PAYMENT_PUBLIC_BASE_URL:-http://localhost:3004}
@@ -209,10 +219,13 @@ services:
       - "3005:3005"
     environment:
       - PORT=3005
-      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-mongodb://mongo:27017/bella_hotel}}
+      - MONGO_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - MONGODB_URI=${MONGODB_URI_DOCKER:-${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_hotel}}}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_BROKER=kafka:9092
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+      - CORS_ORIGINS=${CORS_ORIGINS:-${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
+      - CORS_ORIGIN=${CORS_ORIGIN:-${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-your-email@gmail.com}

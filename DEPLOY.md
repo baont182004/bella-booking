@@ -23,6 +23,8 @@ This repo is a monorepo. Deploy only `frontend` to Vercel. Deploy the backend se
    VITE_API_URL=https://bella-booking-api.duckdns.org
    ```
 
+Do not commit a real frontend production env file. Configure production frontend env values in the Vercel dashboard.
+
 Do not deploy backend services to Vercel. Vercel should build only the `frontend` directory.
 
 ## B. DuckDNS
