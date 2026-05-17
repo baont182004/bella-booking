@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarDays, Clock3, Hotel, RefreshCw, User, Wallet } from "lucide-react";
+import { CalendarDays, Clock3, Hotel, RefreshCw, Search, User, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
-import { useAuth } from "../context/AuthContext";
-import { bookingApi, hotelApi } from "../services/api";
+import { useAuth } from "../context/auth-context";
+import { bookingApi, hotelApi, userApi } from "../services/api";
 import { formatDate } from "../utils/formatters";
+import { passwordPolicyHint, validateStrongPassword } from "../utils/passwordPolicy";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, refreshProfile, setToken, setUser } = useAuth();
   const [summary, setSummary] = useState({
     total: 0,
     pending: 0,
@@ -16,6 +17,23 @@ export default function Dashboard() {
   });
   const [isSyncingMetadata, setIsSyncingMetadata] = useState(false);
   const [metadataSyncResult, setMetadataSyncResult] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    phone: user?.phone || "",
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+  });
+
+  useEffect(() => {
+    setProfileForm({
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      phone: user?.phone || "",
+    });
+  }, [user?.firstName, user?.lastName, user?.phone]);
 
   useEffect(() => {
     const loadSummary = async () => {
@@ -27,11 +45,11 @@ export default function Dashboard() {
         const bookings = response.data.bookings || [];
         setSummary({
           total: bookings.length,
-          pending: bookings.filter((item) => item.status === "pending").length,
+          pending: bookings.filter((item) => item.status === "pending_payment").length,
           confirmed: bookings.filter((item) => item.status === "confirmed").length,
           completed: bookings.filter((item) => item.status === "completed").length,
         });
-      } catch (error) {
+      } catch {
         toast.error("Không thể cập nhật nhanh tổng quan chuyến đi của bạn.");
       }
     };
@@ -62,6 +80,55 @@ export default function Dashboard() {
     }
   };
 
+  const handleProfileChange = (event) => {
+    setProfileForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
+  };
+
+  const handlePasswordChange = (event) => {
+    setPasswordForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
+  };
+
+  const handleProfileUpdate = async (event) => {
+    event.preventDefault();
+
+    try {
+      await userApi.put("/users/profile", {
+        firstName: profileForm.firstName.trim(),
+        lastName: profileForm.lastName.trim(),
+        phone: profileForm.phone.trim(),
+      });
+      await refreshProfile();
+      toast.success("Đã cập nhật hồ sơ.");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Không thể cập nhật hồ sơ.");
+    }
+  };
+
+  const handlePasswordUpdate = async (event) => {
+    event.preventDefault();
+    const passwordError = validateStrongPassword(passwordForm.newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
+      return;
+    }
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      toast.error("Mật khẩu mới phải khác mật khẩu hiện tại.");
+      return;
+    }
+
+    try {
+      const response = await userApi.put("/users/password", passwordForm);
+      setToken(response.data.token);
+      if (response.data.user) {
+        setUser(response.data.user);
+      }
+      setPasswordForm({ currentPassword: "", newPassword: "" });
+      toast.success("Đã đổi mật khẩu và làm mới phiên đăng nhập.");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Không thể đổi mật khẩu.");
+    }
+  };
+
   return (
     <section className="page-section">
       <div className="shell-container section-stack">
@@ -69,11 +136,11 @@ export default function Dashboard() {
           <div>
             <p className="eyebrow">Tài khoản của tôi</p>
             <h1 className="section-title">
-              Chào mừng quay lại, {user?.firstName} {user?.lastName}.
+              {`Chào mừng quay lại, ${user?.firstName || "khách lưu trú"} ${user?.lastName || ""}.`}
             </h1>
             <p className="section-copy">
-              Theo dõi thông tin khách lưu trú, xem lại các đơn Bella và quay lại bước đặt phòng
-              mà không bỏ sót trạng thái đơn.
+              Theo dõi thông tin khách lưu trú, xem lại các đặt phòng Bella và quay lại bước chọn
+              phòng mà không bỏ sót trạng thái đơn.
             </p>
           </div>
           <div className="user-summary-card">
@@ -85,6 +152,22 @@ export default function Dashboard() {
             <p>{membershipText}</p>
           </div>
         </div>
+
+        {summary.pending > 0 ? (
+          <div className="booking-summary-banner">
+            <div>
+              <p className="eyebrow">Nhắc bạn</p>
+              <h2 className="panel-title">Bạn vẫn còn đặt phòng đang chờ bước xác nhận.</h2>
+              <p>
+                Mở mục đặt phòng để kiểm tra thanh toán và bảo đảm kỳ nghỉ tại Bella được xác nhận
+                trước ngày nhận phòng.
+              </p>
+            </div>
+            <Link to="/bookings" className="button button-secondary">
+              Xem đặt phòng
+            </Link>
+          </div>
+        ) : null}
 
         <div className="stats-row stats-row-four">
           <article className="stat-card">
@@ -119,8 +202,8 @@ export default function Dashboard() {
             </div>
             <div className="info-list">
               <div>
-                <span>Email</span>
-                <strong>{user?.email}</strong>
+                <span>Email đăng nhập</span>
+                <strong>Email này đang được dùng cho tài khoản Bella của bạn.</strong>
               </div>
               <div>
                 <span>Số điện thoại</span>
@@ -135,6 +218,25 @@ export default function Dashboard() {
                 <strong>{planningMessage}</strong>
               </div>
             </div>
+            <form className="form-stack" onSubmit={handleProfileUpdate}>
+              <div className="form-grid">
+                <label className="form-field">
+                  <span>Tên</span>
+                  <input name="firstName" className="text-input" value={profileForm.firstName} onChange={handleProfileChange} required />
+                </label>
+                <label className="form-field">
+                  <span>Họ</span>
+                  <input name="lastName" className="text-input" value={profileForm.lastName} onChange={handleProfileChange} required />
+                </label>
+              </div>
+              <label className="form-field">
+                <span>Số điện thoại</span>
+                <input name="phone" className="text-input" value={profileForm.phone} onChange={handleProfileChange} />
+              </label>
+              <button type="submit" className="button button-secondary">
+                Cập nhật hồ sơ
+              </button>
+            </form>
           </div>
 
           <div className="panel">
@@ -145,23 +247,62 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="action-grid">
-              <Link to="/#rooms" className="action-card">
+              <Link to="/rooms" className="action-card">
                 <Hotel size={20} />
                 Xem hạng phòng
               </Link>
               <Link to="/bookings" className="action-card">
                 <CalendarDays size={20} />
-                Xem đơn đặt phòng
+                Xem đặt phòng
               </Link>
               <Link to="/bookings" className="action-card">
                 <Wallet size={20} />
                 Kiểm tra thanh toán
               </Link>
-              <Link to="/#rooms" className="action-card">
-                <Clock3 size={20} />
-                Chọn phòng mới
+              <Link to="/lookup" className="action-card">
+                <Search size={20} />
+                Tra cứu bằng mã
               </Link>
+              <Link to="/rooms" className="action-card">
+                <Clock3 size={20} />
+                Quay lại danh sách phòng
+              </Link>
+              {user?.role === "admin" ? (
+                <Link to="/admin" className="action-card">
+                  <RefreshCw size={20} />
+                  Mở trang quản trị
+                </Link>
+              ) : null}
             </div>
+
+            <form className="form-stack" onSubmit={handlePasswordUpdate}>
+              <label className="form-field">
+                <span>Mật khẩu hiện tại</span>
+                <input
+                  type="password"
+                  name="currentPassword"
+                  className="text-input"
+                  value={passwordForm.currentPassword}
+                  onChange={handlePasswordChange}
+                  required
+                />
+              </label>
+              <label className="form-field">
+                <span>Mật khẩu mới</span>
+                <input
+                  type="password"
+                  name="newPassword"
+                  className="text-input"
+                  value={passwordForm.newPassword}
+                  onChange={handlePasswordChange}
+                  required
+                />
+                <span className="field-note">{passwordPolicyHint}</span>
+              </label>
+              <button type="submit" className="button button-secondary">
+                Đổi mật khẩu
+              </button>
+            </form>
           </div>
 
           {user?.role === "admin" ? (

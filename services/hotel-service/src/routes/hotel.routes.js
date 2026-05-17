@@ -1,7 +1,7 @@
 import express from "express";
 import Joi from "joi";
 import mongoose from "mongoose";
-import { Hotel, Room } from "../config/database.js";
+import { Booking, Hotel, Room } from "../config/database.js";
 import { getRedisClient } from "../config/redis.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import {
@@ -33,7 +33,22 @@ const roomSchema = Joi.object({
   amenities: Joi.array().items(Joi.string()).optional(),
   images: Joi.array().items(Joi.string()).optional(),
   isAvailable: Joi.boolean().optional(),
-});
+}).unknown(false);
+
+const roomUpdateSchema = Joi.object({
+  roomNumber: Joi.string().optional(),
+  roomType: Joi.string().optional(),
+  description: Joi.string().allow("").optional(),
+  pricePerNight: Joi.number().positive().optional(),
+  capacity: Joi.number().integer().positive().optional(),
+  amenities: Joi.array().items(Joi.string()).optional(),
+  images: Joi.array().items(Joi.string()).optional(),
+  isAvailable: Joi.boolean().optional(),
+}).min(1).unknown(false);
+
+function escapeRegex(value = "") {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function normalizeHotelName(value) {
   return value?.trim().toLowerCase() || "";
@@ -79,10 +94,10 @@ router.get("/", async (req, res) => {
 
     const filter = { name: BELLA_HOTEL_NAME };
     if (city) {
-      filter.city = { $regex: city, $options: "i" };
+      filter.city = { $regex: escapeRegex(city), $options: "i" };
     }
     if (country) {
-      filter.country = { $regex: country, $options: "i" };
+      filter.country = { $regex: escapeRegex(country), $options: "i" };
     }
     if (minRating) {
       filter.rating = { $gte: parseFloat(minRating) };
@@ -214,9 +229,12 @@ router.get("/:id/rooms", async (req, res) => {
       return res.json(JSON.parse(cached));
     }
 
-    const where = { hotel_id: new mongoose.Types.ObjectId(id) };
+    const where = {
+      hotel_id: new mongoose.Types.ObjectId(id),
+      is_active: { $ne: false },
+    };
     if (roomType) {
-      where.room_type = { $regex: roomType, $options: "i" };
+      where.room_type = { $regex: escapeRegex(roomType), $options: "i" };
     }
     if (minPrice) {
       where.price_per_night = { $gte: parseFloat(minPrice) };
@@ -295,6 +313,125 @@ router.post("/:id/rooms", authenticate, requireRole("admin"), async (req, res) =
   }
 });
 
+// -- PUT /:hotelId/rooms/:roomId -----------------------------------------------
+router.put(
+  "/:hotelId/rooms/:roomId",
+  authenticate,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { hotelId, roomId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(hotelId)) {
+        return res.status(400).json({ error: "Invalid hotel id" });
+      }
+      if (!mongoose.Types.ObjectId.isValid(roomId)) {
+        return res.status(400).json({ error: "Invalid room id" });
+      }
+
+      const hotel = await loadBellaHotelById(hotelId);
+      if (!hotel) {
+        return res.status(404).json({ error: "Hotel not found" });
+      }
+
+      const { error, value } = roomUpdateSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+      }
+
+      const room = await Room.findOne({
+        _id: roomId,
+        hotel_id: new mongoose.Types.ObjectId(hotelId),
+        is_active: { $ne: false },
+      });
+      if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+      }
+
+      if (value.roomNumber !== undefined) room.room_number = value.roomNumber;
+      if (value.roomType !== undefined) room.room_type = value.roomType;
+      if (value.description !== undefined) room.description = value.description || null;
+      if (value.pricePerNight !== undefined) room.price_per_night = value.pricePerNight;
+      if (value.capacity !== undefined) room.capacity = value.capacity;
+      if (value.amenities !== undefined) room.amenities = value.amenities;
+      if (value.images !== undefined) room.images = value.images;
+      if (value.isAvailable !== undefined) room.is_available = value.isAvailable;
+      await room.save();
+
+      await clearHotelCaches([
+        `hotel:bella:${hotelId}:rooms:*`,
+        `hotel:bella:${hotelId}:room:${roomId}`,
+      ]);
+
+      res.json({
+        message: "Room updated successfully",
+        room: { ...room.toObject(), id: room._id.toString() },
+      });
+    } catch (error) {
+      console.error("Update room error:", error);
+      if (error.code === 11000) {
+        return res.status(409).json({ error: "Room number already exists for this hotel" });
+      }
+      res.status(500).json({ error: "Failed to update room" });
+    }
+  },
+);
+
+// -- DELETE /:hotelId/rooms/:roomId --------------------------------------------
+router.delete(
+  "/:hotelId/rooms/:roomId",
+  authenticate,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { hotelId, roomId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(hotelId)) {
+        return res.status(400).json({ error: "Invalid hotel id" });
+      }
+      if (!mongoose.Types.ObjectId.isValid(roomId)) {
+        return res.status(400).json({ error: "Invalid room id" });
+      }
+
+      const room = await Room.findOne({
+        _id: roomId,
+        hotel_id: new mongoose.Types.ObjectId(hotelId),
+        is_active: { $ne: false },
+      });
+      if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+      }
+
+      const bookingCount = await Booking.countDocuments({ room_id: room._id });
+      if (bookingCount > 0) {
+        room.is_active = false;
+        room.is_available = false;
+        await room.save();
+
+        await clearHotelCaches([
+          `hotel:bella:${hotelId}:rooms:*`,
+          `hotel:bella:${hotelId}:room:${roomId}`,
+        ]);
+
+        return res.json({
+          message: "Room archived because it already has booking history",
+          room: { ...room.toObject(), id: room._id.toString() },
+        });
+      }
+
+      await room.deleteOne();
+
+      await clearHotelCaches([
+        `hotel:bella:${hotelId}:rooms:*`,
+        `hotel:bella:${hotelId}:room:${roomId}`,
+      ]);
+
+      res.json({ message: "Room deleted successfully" });
+    } catch (error) {
+      console.error("Delete room error:", error);
+      res.status(500).json({ error: "Failed to delete room" });
+    }
+  },
+);
+
 // -- GET /:hotelId/rooms/:roomId -----------------------------------------------
 router.get("/:hotelId/rooms/:roomId", async (req, res) => {
   try {
@@ -321,6 +458,7 @@ router.get("/:hotelId/rooms/:roomId", async (req, res) => {
     const room = await Room.findOne({
       _id: roomId,
       hotel_id: new mongoose.Types.ObjectId(hotelId),
+      is_active: { $ne: false },
     }).lean();
     if (!room) {
       return res.status(404).json({ error: "Room not found" });

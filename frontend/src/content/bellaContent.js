@@ -13,7 +13,8 @@ export const bellaContent = {
     shortDescription:
       "Khách sạn 3 sao tại An Thới với nhiều hạng phòng phù hợp cho cặp đôi, gia đình và nhóm bạn muốn nghỉ ngơi thoải mái gần các điểm đến nổi bật.",
     address:
-      "SOR209 Khu do thi Sun Premier Village Primavera, To 10, Khu, Dac khu Phu Quoc, An Thoi, Phu Quoc, Viet Nam",
+      "Sunset Town, S209 Sorento 2, An Thới, Phú Quốc, An Giang 92513, Việt Nam",
+    locationReferenceUrl: "https://maps.app.goo.gl/tbXdJtwRAwqZR8KN9",
     city: "Phu Quoc",
     country: "Vietnam",
     distanceFromCenter: "Cách trung tâm Phú Quốc khoảng 22 km",
@@ -45,6 +46,13 @@ export const bellaContent = {
     finalCtaTitle: "Sẵn sàng chọn hạng phòng phù hợp cho kỳ nghỉ tại Phú Quốc?",
     finalCtaCopy:
       "Xem chi tiết từng hạng phòng, kiểm tra giá hiện tại và hoàn tất đặt phòng trực tiếp tại Bella Hotel Phú Quốc.",
+  },
+  social: {
+    facebook: {
+      url: "https://www.facebook.com/people/Bella-Hotel-Ph%C3%BA-Qu%E1%BB%91c/61564741114129/",
+      label: "Bella Hotel Phú Quốc trên Facebook",
+      supportingCopy: "Cập nhật hình ảnh và thông tin mới trên fanpage chính thức của khách sạn.",
+    },
   },
   trust: {
     guestScore: 8.6,

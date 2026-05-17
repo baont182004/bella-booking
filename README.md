@@ -1,135 +1,45 @@
-# Hotel Booking System - Full Stack Application
+# BELLA Hotel Booking System
 
-A complete hotel booking system with microservices backend and modern React frontend.
+BELLA is a single-property hotel booking system with a React frontend and Node.js microservices backend. The current repo state is demo/staging ready for the core customer, account, admin, promotion, and demo-payment flows.
 
-## 🏗️ Architecture
+## Verified Stack
 
-### Backend (Microservices)
+- Frontend: React + Vite on `http://localhost:5173`
+- User service: `http://localhost:3001`
+- Hotel service: `http://localhost:3002`
+- Booking service: `http://localhost:3003`
+- Payment service: `http://localhost:3004`
+- Notification service: `http://localhost:3005`
+- Infrastructure: Docker Compose for Redis, Kafka, Zookeeper, and all backend services
+- Database: MongoDB reachable through `MONGODB_URI` in the root `.env`
 
-- **User Service** (Port 3001) - User authentication and management
-- **Hotel Service** (Port 3002) - Hotel and room management
-- **Booking Service** (Port 3003) - Reservation handling
-- **Payment Service** (Port 3004) - Payment processing
-- **Notification Service** (Port 3005) - Email/SMS notifications
+## Quick Start
 
-### Frontend
-
-- **React App** (Port 5173) - Modern SPA with Vite, React Router, and plain CSS
-
-### Infrastructure
-
-- **MongoDB Atlas** - Primary database
-- **Redis** (Port 6379) - Caching layer
-- **Kafka + Zookeeper** (Ports 9092, 2181) - Event streaming
-
-## ✨ Features
-
-- 🔐 User authentication with JWT
-- 🏨 Hotel browsing and search
-- 🛏️ Room selection and booking
-- 💳 Payment processing
-- 📧 Email notifications
-- 👤 User profile management
-- 📱 Responsive design
-- 🚀 Microservices architecture
-- 📊 Real-time event streaming with Kafka
-- ⚡ Redis caching for performance
-
-## 🚀 Prerequisites
-
-- Docker and Docker Compose
-- Node.js 18+ (for frontend development)
-- npm or yarn
-
-## ⚡ Quick Start
-
-### Option 1: Automated Setup (Recommended)
+1. Copy the root env file and fill in the required values.
 
 ```bash
-# Run the setup script
-chmod +x setup.sh
-./setup.sh
-
-# Start frontend
-cd frontend
-npm run dev
-```
-
-### Option 2: Manual Setup
-
-**1. Start Backend Services**
-
-```bash
-# Configure the root .env file first
-
-# Start all backend services
-docker-compose up -d
-
-# Check service health
-docker-compose ps
-```
-
-**2. Start Frontend**
-
-```bash
-cd frontend
-npm install
 cp .env.example .env
-npm run dev
 ```
 
-### 🌐 Access the Application
+Required values:
 
-- **Frontend**: http://localhost:5173
-- **API Documentation**: See [docs/QUICKSTART.md](docs/QUICKSTART.md)
+- `MONGODB_URI`: use a MongoDB URI reachable from both Docker containers and local scripts
+- `JWT_SECRET`: set a long random secret
+- `SMTP_*`: optional for real email delivery; safe to leave as placeholders for demo use
 
-## 📖 Documentation
-
-- **[Quick Start Guide](docs/QUICKSTART.md)** - Local run, seed, and API examples
-- **[Architecture Documentation](docs/ARCHITECTURE.md)** - Service topology and runtime notes
-- **[PowerShell Windows Checklist](docs/POWERSHELL_WINDOWS_CHECKLIST.md)** - Windows-specific run and debug steps
-
-## 🎯 User Flow
-
-1. **Register/Login** → Create account or sign in
-2. **Browse Hotels** → Search and filter hotels by location
-3. **Select Room** → View hotel details and available rooms
-4. **Book Room** → Choose dates and complete booking
-5. **Make Payment** → Process payment (simulated)
-6. **Manage Bookings** → View and manage your reservations
-
-## 📸 Screenshots
-
-### Home Page
-
-Modern landing page with hero section and features
-
-### Hotel Listing
-
-Browse hotels with search and filter options
-
-### Booking Flow
-
-Seamless booking experience with date selection and payment
-
-### User Dashboard
-
-Manage bookings and profile in one place
-
-## 🛠️ Development
-
-### Backend Development
-
-Run individual services locally:
+2. Start the backend stack.
 
 ```bash
-# Example: User Service
-cd services/user-service
-npm install
-npm run dev
+npm run backend:up
 ```
 
-### Frontend Development
+3. Seed demo data and flush cache.
+
+```bash
+npm run seed:demo
+```
+
+4. Start the frontend in a separate terminal.
 
 ```bash
 cd frontend
@@ -137,100 +47,57 @@ npm install
 npm run dev
 ```
 
-The frontend calls backend services directly. Configure the base URL in the frontend context if needed.
+## Demo Accounts
 
-### Viewing Logs
+- Admin: `admin.bella@example.com` / `Password123!`
+- Customer: `lana.nguyen@example.com` / `Password123!`
+- Customer: `minh.tran@example.com` / `Password123!`
 
-```bash
-# All services
-docker-compose logs -f
+## Demo Payment Cards
 
-# Specific service
-docker-compose logs -f user-service
+- Success: `4111 1111 1111 1111`
+- Forced failure: any card ending in `0002`, for example `4000 0000 0000 0002`
 
-# Frontend (in separate terminal)
-cd frontend && npm run dev
-```
-
-## 🔧 Technology Stack
-
-### Backend
-
-- **Runtime**: Node.js 18
-- **Framework**: Express.js
-- **Database**: MongoDB Atlas
-- **Cache**: Redis 7
-- **Message Broker**: Apache Kafka 7.5
-- **Authentication**: JWT (jsonwebtoken)
-### Project Structure
-
-```
-adv-backend/
-├-- services/                   # Backend microservices
-│   ├-- user-service/           # User & Auth service
-│   ├-- hotel-service/          # Hotel management
-│   ├-- booking-service/        # Booking management
-│   ├-- payment-service/        # Payment processing
-│   └-- notification-service/   # Email notifications
-├-- frontend/                   # React + Vite frontend
-│   ├-- src/
-│   │   ├-- components/         # Reusable components
-│   │   ├-- pages/              # Page components
-│   │   ├-- context/            # Context providers
-│   │   └-- services/           # API services
-│   ├-- public/
-│   └-- package.json
-├-- data/                       # Bella metadata and normalized content
-├-- docs/                       # Project documentation
-├-- scripts/                    # Seed and sync scripts
-├-- docker-compose.yml          # Docker services config
-├-- setup.sh                    # Automated setup script
-├-- start.sh                    # Backend startup script
-├-- .env                        # Environment variables
-└-- README.md                  # This file
-```
-
-## Service Communication
-
-- **Synchronous**: REST APIs via direct service endpoints
-- **Asynchronous**: Kafka events for booking confirmations, payments, and notifications
-
-## Kafka Topics
-
-- `booking-created` - Published when a new booking is created
-- `payment-processed` - Published when payment is completed
-- `booking-confirmed` - Published when booking is confirmed
-- `notification-request` - Published to trigger notifications
-
-## Testing
+## Useful Commands
 
 ```bash
-# Run tests for all services
-docker-compose exec user-service npm test
-# ... repeat for other services
+npm run backend:up
+npm run backend:down
+npm run seed:demo
+npm run test:api
+npm run frontend:lint
+npm run frontend:build
 ```
 
-## Monitoring
+## What Works
 
-- View logs: `docker-compose logs -f [service-name]`
-- MongoDB Atlas: Access via your Atlas connection string
-- Redis: Access via `localhost:6379`
-- Kafka: Access via `localhost:9092`
+- Public room browsing and room detail pages
+- Availability checks before booking
+- Booking creation with server-side price calculation
+- Promotion validation and application on the server
+- Booking lookup by reference and guest email
+- Register, login, logout, profile update, and password change
+- Admin dashboard for rooms, bookings, promotions, users, and audit logs
+- Demo-safe payment flow with pending, paid, failed, and refunded states
+- JWT auth with session invalidation, RBAC, rate limiting, and constrained CORS
 
-## Production Deployment
+## Verification
 
-1. Update environment variables in `.env`
-2. Use production-ready configurations
-3. Set up proper logging and monitoring
-4. Configure SSL/TLS certificates
-5. Set up database backups
-6. Configure Kafka replication
+The current repo has been verified with:
 
-## Contributing
+```bash
+npm run test:api
+npm run frontend:lint
+npm run frontend:build
+```
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+## Documentation
+
+- [docs/QUICKSTART.md](docs/QUICKSTART.md)
+- [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md)
+- [docs/AUDIT.md](docs/AUDIT.md)
+- [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md)
+- [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md)
+- [docs/TEST_PLAN.md](docs/TEST_PLAN.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 

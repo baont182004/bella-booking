@@ -5,6 +5,7 @@ import { AuthProvider } from "./context/AuthContext.jsx";
 import { Toaster } from "react-hot-toast";
 import App from "./App.jsx";
 import "./index.css";
+import "./bella-polish.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

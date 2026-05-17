@@ -24,7 +24,7 @@ export default function RoomCard({ room, variant = "listing", className = "" }) 
     .join(" ");
 
   return (
-    <article className={classes}>
+    <article className={classes} data-testid={`room-card-${room.code}`}>
       <div className="room-preview-media">
         <img
           src={room.images?.[0] || "/bella/bella-hero.jpg"}
@@ -78,15 +78,26 @@ export default function RoomCard({ room, variant = "listing", className = "" }) 
         <RoomHighlights items={viewTags} className="room-chip-row-tight" />
         <RoomHighlights items={topHighlights} className="room-chip-row-tight" />
 
+        <p className="room-preview-note">
+          {room.isLive
+            ? "Mở trang chi tiết để kiểm tra ngày ở, sức chứa và tổng tiền trước khi giữ chỗ."
+            : "Xem trước toàn bộ thông tin phòng, tiện nghi và bố cục trước khi Bella mở đặt trực tuyến."}
+        </p>
+
         <div className="room-preview-actions">
-          <Link to={`/rooms/${room.code}`} className="button button-secondary">
+          <Link
+            to={`/rooms/${room.code}`}
+            className="button button-secondary"
+            data-testid={`view-room-${room.code}`}
+          >
             Xem chi tiết
           </Link>
           <Link
             to={`/rooms/${room.code}#book`}
             className="button button-primary"
+            data-testid={`book-room-${room.code}`}
           >
-            Đặt phòng
+            {room.isLive ? "Xem giá và đặt" : "Xem cách đặt"}
             <ArrowRight size={16} />
           </Link>
         </div>

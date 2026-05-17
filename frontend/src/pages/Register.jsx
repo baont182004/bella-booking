@@ -11,7 +11,8 @@ import {
   UserPlus,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/auth-context";
+import { passwordPolicyHint, validateStrongPassword } from "../utils/passwordPolicy";
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -26,6 +27,20 @@ export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectTo = location.state?.redirectTo;
+  const isBookingRedirect = redirectTo?.includes("/rooms/");
+
+  const getRegisterErrorMessage = (error) => {
+    if (error?.response?.status === 409) {
+      return "Email này đã có tài khoản Bella. Bạn có thể đăng nhập ngay.";
+    }
+
+    if (error?.response?.status === 429) {
+      return "Bạn đã gửi quá nhiều yêu cầu tạo tài khoản. Vui lòng đợi ít phút rồi thử lại.";
+    }
+
+    return error?.response?.data?.error || "Không thể tạo tài khoản.";
+  };
 
   const handleChange = (event) => {
     setFormData((prev) => ({ ...prev, [event.target.name]: event.target.value }));
@@ -52,8 +67,9 @@ export default function Register() {
       nextErrors.phone = "Vui lòng nhập số điện thoại hợp lệ hoặc để trống trường này.";
     }
 
-    if (formData.password.trim().length < 6) {
-      nextErrors.password = "Mật khẩu cần có ít nhất 6 ký tự.";
+    const passwordError = validateStrongPassword(formData.password.trim());
+    if (passwordError) {
+      nextErrors.password = passwordError;
     }
 
     return nextErrors;
@@ -76,9 +92,9 @@ export default function Register() {
         phone: formData.phone.trim(),
       });
       toast.success("Tài khoản của bạn đã sẵn sàng.");
-      navigate(location.state?.redirectTo || "/dashboard");
+      navigate(redirectTo || "/dashboard", { replace: true });
     } catch (error) {
-      toast.error(error.response?.data?.error || "Không thể tạo tài khoản.");
+      toast.error(getRegisterErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -94,6 +110,11 @@ export default function Register() {
             Lưu thông tin một lần để dễ dàng quản lý lưu trú, thanh toán và cập nhật đặt phòng
             Bella trong cùng một tài khoản.
           </p>
+          {isBookingRedirect ? (
+            <div className="booking-inline-note">
+              Tạo tài khoản xong là bạn có thể quay lại ngay bước giữ chỗ đang xem.
+            </div>
+          ) : null}
           <div className="auth-benefits">
             <div className="detail-highlight">
               <BadgeCheck size={18} />
@@ -118,7 +139,9 @@ export default function Register() {
               <p className="eyebrow">Hồ sơ khách lưu trú</p>
               <h2 className="panel-title">Tạo tài khoản đặt phòng Bella</h2>
               <p className="auth-card-copy">
-                Điền thông tin bên dưới để bắt đầu đặt và quản lý lưu trú tại Bella.
+                {isBookingRedirect
+                  ? "Điền thông tin bên dưới để Bella lưu tài khoản và đưa bạn quay lại bước đặt phòng."
+                  : "Điền thông tin bên dưới để bắt đầu đặt và quản lý lưu trú tại Bella."}
               </p>
             </div>
           </div>
@@ -135,6 +158,7 @@ export default function Register() {
                     placeholder="An"
                     value={formData.firstName}
                     onChange={handleChange}
+                    data-testid="register-first-name"
                     aria-invalid={Boolean(errors.firstName)}
                     required
                   />
@@ -154,6 +178,7 @@ export default function Register() {
                     placeholder="Nguyễn"
                     value={formData.lastName}
                     onChange={handleChange}
+                    data-testid="register-last-name"
                     aria-invalid={Boolean(errors.lastName)}
                     required
                   />
@@ -174,6 +199,7 @@ export default function Register() {
                   placeholder="tenban@example.com"
                   value={formData.email}
                   onChange={handleChange}
+                  data-testid="register-email"
                   aria-invalid={Boolean(errors.email)}
                   required
                 />
@@ -195,6 +221,7 @@ export default function Register() {
                   placeholder="+84 901 234 567"
                   value={formData.phone}
                   onChange={handleChange}
+                  data-testid="register-phone"
                   aria-invalid={Boolean(errors.phone)}
                 />
               </span>
@@ -215,6 +242,7 @@ export default function Register() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
+                  data-testid="register-password"
                   aria-invalid={Boolean(errors.password)}
                   required
                 />
@@ -223,7 +251,7 @@ export default function Register() {
                 <span className="field-error">{errors.password}</span>
               ) : (
                 <span className="field-note">
-                  Hãy chọn mật khẩu có ít nhất 6 ký tự.
+                  {passwordPolicyHint}
                 </span>
               )}
             </label>
@@ -232,6 +260,7 @@ export default function Register() {
               type="submit"
               className="button button-primary button-block"
               disabled={isSubmitting}
+              data-testid="register-submit"
             >
               {isSubmitting ? <Activity className="spinner" /> : <UserPlus size={18} />}
               Tạo tài khoản

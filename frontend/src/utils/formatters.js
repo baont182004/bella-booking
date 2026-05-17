@@ -62,6 +62,38 @@ const accessModeLabels = {
   stairs: "Cầu thang",
 };
 
+const bookingStatusLabels = {
+  pending_payment: "Chờ thanh toán",
+  pending: "Chờ thanh toán",
+  confirmed: "Đã xác nhận",
+  payment_failed: "Thanh toán lỗi",
+  cancelled: "Đã hủy",
+  completed: "Hoàn tất",
+  expired: "Đã hết hạn",
+  failed: "Thanh toán lỗi",
+  refunded: "Đã hoàn tiền",
+};
+
+const paymentStatusLabels = {
+  pending: "Chờ xử lý",
+  requires_action: "Chờ hoàn tất checkout",
+  processing: "Đang xử lý",
+  authorized: "Đã ủy quyền",
+  succeeded: "Đã thanh toán",
+  completed: "Đã thanh toán",
+  failed: "Thất bại",
+  refunded: "Đã hoàn tiền",
+  partially_refunded: "Hoàn tiền một phần",
+  expired: "Phiên hết hạn",
+};
+
+const paymentMethodLabels = {
+  card: "Thẻ đã token hóa",
+  hosted_checkout: "Hosted checkout",
+  credit_card: "Thẻ tín dụng",
+  debit_card: "Thẻ ghi nợ",
+};
+
 function fallbackLabel(value = "") {
   return value
     .split("_")
@@ -87,11 +119,54 @@ export function formatDateRange(start, end) {
 
 export function formatStatusLabel(status) {
   if (!status) return "Chưa xác định";
-  if (status === "pending") return "Chờ xác nhận";
-  if (status === "confirmed") return "Đã xác nhận";
-  if (status === "cancelled") return "Đã hủy";
-  if (status === "completed") return "Hoàn tất";
+  if (bookingStatusLabels[status]) return bookingStatusLabels[status];
+  if (paymentStatusLabels[status]) return paymentStatusLabels[status];
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+export function formatBookingStatusLabel(status) {
+  return formatStatusLabel(status);
+}
+
+export function formatBookingStatusDescription(status) {
+  if (status === "pending_payment" || status === "pending") {
+    return "Bella đã giữ yêu cầu của bạn và đang chờ hoàn tất thanh toán để xác nhận kỳ nghỉ.";
+  }
+
+  if (status === "confirmed") {
+    return "Đơn đặt phòng đã được xác nhận. Bạn chỉ cần lưu lại mã đặt phòng và đến nhận phòng đúng ngày.";
+  }
+
+  if (status === "completed") {
+    return "Kỳ nghỉ này đã hoàn tất và được lưu trong lịch sử đặt phòng của bạn.";
+  }
+
+  if (status === "expired") {
+    return "Bella đã hết thời gian giữ chỗ vì checkout session không được hoàn tất đúng hạn.";
+  }
+
+  if (status === "cancelled") {
+    return "Đơn đặt phòng này đã được hủy và sẽ không phát sinh thêm thao tác nào.";
+  }
+
+  if (status === "payment_failed" || status === "failed") {
+    return "Thanh toán chưa thành công. Bạn có thể thử lại hoặc liên hệ bộ phận hỗ trợ của Bella.";
+  }
+
+  if (status === "refunded") {
+    return "Khoản thanh toán cho đơn này đã được hoàn lại theo thông tin xử lý của Bella.";
+  }
+
+  return "Xem lại chi tiết lưu trú và trạng thái thanh toán của bạn tại đây.";
+}
+
+export function formatPaymentStatusLabel(status) {
+  if (!status) return "Chưa có giao dịch";
+  return paymentStatusLabels[status] || formatStatusLabel(status);
+}
+
+export function formatPaymentMethodLabel(value = "") {
+  return paymentMethodLabels[value] || fallbackLabel(value);
 }
 
 export function formatGuestLabel(count) {
@@ -160,4 +235,12 @@ export function formatRoomDisplayName(room) {
 
 export function formatAccessModeLabel(value = "") {
   return accessModeLabels[value] || fallbackLabel(value);
+}
+
+export function formatRoomCodeTitle(value = "") {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

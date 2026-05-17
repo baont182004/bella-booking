@@ -1,8 +1,20 @@
 import mongoose from "mongoose";
 
-const mongoUri =
-  process.env.MONGODB_URI ||
-  "mongodb+srv://<user>:<password>@cluster0.mongodb.net/hotel_db?retryWrites=true&w=majority";
+function getMongoUri() {
+  return process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/bella_hotel";
+}
+
+const userSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true },
+    firstName: { type: String, required: true },
+    lastName: { type: String, required: true },
+    phone: { type: String },
+    role: { type: String, enum: ["customer", "admin"], default: "customer" },
+    sessionVersion: { type: Number, default: 0, min: 0 },
+  },
+  { timestamps: true, collection: "users" },
+);
 
 const hotelSchema = new mongoose.Schema(
   {
@@ -97,12 +109,30 @@ roomSchema.index(
   },
 );
 
+const bookingSchema = new mongoose.Schema(
+  {
+    room_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Room",
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ["pending_payment", "confirmed", "payment_failed", "cancelled", "completed", "expired"],
+      default: "pending_payment",
+    },
+  },
+  { timestamps: true, collection: "bookings" },
+);
+
 export const Hotel = mongoose.model("Hotel", hotelSchema);
 export const Room = mongoose.model("Room", roomSchema);
+export const Booking = mongoose.model("Booking", bookingSchema);
+export const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 export async function connectDatabase() {
   try {
-    await mongoose.connect(mongoUri);
+    await mongoose.connect(getMongoUri());
     console.log("Connected to MongoDB via Mongoose");
   } catch (error) {
     console.error("Database connection error:", error);

@@ -1,0 +1,20 @@
+{
+  "name": "bella-hotel-booking-system",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "backend:up": "docker compose up -d --build",
+    "backend:down": "docker compose down",
+    "seed:demo": "node scripts/reset-demo-data.mjs",
+    "seed:admin": "node scripts/ensure-admin.mjs",
+    "test:unit": "node --test tests/*.unit.test.mjs",
+    "test:api": "node --test tests/api.integration.test.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "frontend:build": "npm --prefix frontend run build"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}

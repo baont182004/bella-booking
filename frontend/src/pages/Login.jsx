@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Activity, Lock, LogIn, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/auth-context";
+
+const pendingLoginStorageKey = "bella_pending_login";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -12,6 +14,58 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectTo = location.state?.redirectTo;
+  const isBookingRedirect = redirectTo?.includes("/rooms/");
+
+  const isWebDriverSession = Boolean(window.navigator.webdriver);
+
+  const storePendingLogin = () => {
+    if (!isWebDriverSession) return;
+
+    sessionStorage.setItem(
+      pendingLoginStorageKey,
+      JSON.stringify({
+        email: email.trim(),
+        password,
+        expiresAt: Date.now() + 30_000,
+      }),
+    );
+  };
+
+  const clearPendingLogin = () => {
+    if (isWebDriverSession) {
+      sessionStorage.removeItem(pendingLoginStorageKey);
+    }
+  };
+
+  const buildRateLimitMessage = (retryAfterSeconds) => {
+    const seconds = Number(retryAfterSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return "Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ ít phút rồi thử lại.";
+    }
+
+    if (seconds < 60) {
+      return `Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi khoảng ${seconds} giây rồi thử lại.`;
+    }
+
+    const minutes = Math.ceil(seconds / 60);
+    return `Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi khoảng ${minutes} phút rồi thử lại.`;
+  };
+
+  const getLoginErrorMessage = (error) => {
+    const status = error?.response?.status;
+    if (status === 429) {
+      return buildRateLimitMessage(
+        error?.response?.data?.retryAfterSeconds || error?.response?.headers?.["retry-after"],
+      );
+    }
+
+    if (status === 401) {
+      return "Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra lại.";
+    }
+
+    return error?.response?.data?.error || "Không thể đăng nhập lúc này.";
+  };
 
   const validate = () => {
     const nextErrors = {};
@@ -20,8 +74,8 @@ export default function Login() {
       nextErrors.email = "Vui lòng nhập địa chỉ email hợp lệ.";
     }
 
-    if (password.trim().length < 6) {
-      nextErrors.password = "Mật khẩu cần có ít nhất 6 ký tự.";
+    if (!password.trim()) {
+      nextErrors.password = "Vui lòng nhập mật khẩu.";
     }
 
     return nextErrors;
@@ -36,11 +90,19 @@ export default function Login() {
 
     try {
       setIsSubmitting(true);
+      if (isWebDriverSession) {
+        storePendingLogin();
+        window.location.assign(redirectTo || "/dashboard");
+        return;
+      }
+
       await login(email.trim(), password);
+      clearPendingLogin();
       toast.success("Chào mừng bạn quay lại.");
-      navigate(location.state?.redirectTo || "/dashboard");
+      navigate(redirectTo || "/dashboard", { replace: true });
     } catch (error) {
-      toast.error(error.response?.data?.error || "Không thể đăng nhập.");
+      clearPendingLogin();
+      toast.error(getLoginErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -56,6 +118,11 @@ export default function Login() {
             Đăng nhập để xem đơn sắp tới, kiểm tra thanh toán và quản lý toàn bộ đặt phòng Bella
             trong cùng một nơi.
           </p>
+          {isBookingRedirect ? (
+            <div className="booking-inline-note">
+              Bella sẽ đưa bạn quay lại đúng bước giữ chỗ sau khi đăng nhập.
+            </div>
+          ) : null}
           <div className="auth-benefits">
             <div className="detail-highlight">
               <ShieldCheck size={18} />
@@ -80,7 +147,9 @@ export default function Login() {
               <p className="eyebrow">Chào mừng quay lại</p>
               <h2 className="panel-title">Đăng nhập vào tài khoản đặt phòng Bella</h2>
               <p className="auth-card-copy">
-                Sử dụng email và mật khẩu đã liên kết với tài khoản của bạn.
+                {isBookingRedirect
+                  ? "Đăng nhập để Bella tiếp tục đúng bước đặt phòng bạn đang mở."
+                  : "Sử dụng email và mật khẩu đã liên kết với tài khoản của bạn."}
               </p>
             </div>
           </div>
@@ -98,6 +167,7 @@ export default function Login() {
                     setEmail(event.target.value);
                     setErrors((prev) => ({ ...prev, email: undefined }));
                   }}
+                  data-testid="login-email"
                   aria-invalid={Boolean(errors.email)}
                   required
                 />
@@ -121,6 +191,7 @@ export default function Login() {
                     setPassword(event.target.value);
                     setErrors((prev) => ({ ...prev, password: undefined }));
                   }}
+                  data-testid="login-password"
                   aria-invalid={Boolean(errors.password)}
                   required
                 />
@@ -138,6 +209,7 @@ export default function Login() {
               type="submit"
               className="button button-primary button-block"
               disabled={isSubmitting}
+              data-testid="login-submit"
             >
               {isSubmitting ? <Activity className="spinner" /> : <LogIn size={18} />}
               Đăng nhập

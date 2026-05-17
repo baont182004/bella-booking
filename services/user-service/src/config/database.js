@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 
-const mongoUri =
-  process.env.MONGODB_URI ||
-  "mongodb+srv://<user>:<password>@cluster0.mongodb.net/hotel_db?retryWrites=true&w=majority";
+function getMongoUri() {
+  return process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/bella_hotel";
+}
 
 const userSchema = new mongoose.Schema(
   {
@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema(
     lastName: { type: String, required: true },
     phone: { type: String },
     role: { type: String, enum: ["customer", "admin"], default: "customer" },
+    sessionVersion: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true, collection: "users" },
 );
@@ -20,7 +21,7 @@ export const User = mongoose.model("User", userSchema);
 
 export async function connectDatabase() {
   try {
-    await mongoose.connect(mongoUri);
+    await mongoose.connect(getMongoUri());
     console.log("Connected to MongoDB via Mongoose");
   } catch (error) {
     console.error("Database connection error:", error);

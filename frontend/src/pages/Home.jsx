@@ -9,16 +9,15 @@ import {
   Wifi,
 } from "lucide-react";
 import FeaturedRoomCompare from "../components/FeaturedRoomCompare";
+import ComboGrid from "../components/ComboGrid";
 import LoadingGrid from "../components/LoadingGrid";
 import RoomCard from "../components/RoomCard";
-import { useAuth } from "../context/AuthContext";
+import SocialChannelLink from "../components/SocialChannelLink";
+import { useAuth } from "../context/auth-context";
 import { bellaContent } from "../content/bellaContent";
 import { useBellaHotelData } from "../hooks/useBellaHotelData";
+import { useCombos } from "../hooks/useCombos";
 import { formatCurrency } from "../utils/formatters";
-
-function scrollToSection(sectionId) {
-  document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
 
 function SectionHeader({ eyebrow, title, copy, action }) {
   return (
@@ -40,28 +39,23 @@ export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { hotel, roomCatalog, liveStartingRate, loading, loadError } = useBellaHotelData();
+  const { combos, loading: combosLoading, error: combosError } = useCombos({ sort: "displayOrder" });
 
   useEffect(() => {
     document.title = bellaContent.meta.title;
   }, []);
 
   const heroImage = hotel?.images?.[0] || bellaContent.gallery[0].src;
-  const primaryBookableRoom = roomCatalog.find((room) => room.isLive) || roomCatalog[0] || null;
   const featuredRooms = featuredRoomCodes
     .map((code) => roomCatalog.find((room) => room.code === code))
     .filter(Boolean);
   const remainingRooms = roomCatalog.filter(
     (room) => !featuredRooms.some((featuredRoom) => featuredRoom.code === room.code),
   );
-  const listingRooms = featuredRooms.length === 2 ? remainingRooms : roomCatalog;
+  const listingRooms = (featuredRooms.length === 2 ? remainingRooms : roomCatalog).slice(0, 4);
 
   const handlePrimaryBooking = () => {
-    if (primaryBookableRoom?.isLive) {
-      navigate(`/rooms/${primaryBookableRoom.code}#book`);
-      return;
-    }
-
-    scrollToSection("rooms");
+    navigate("/rooms");
   };
 
   return (
@@ -75,15 +69,11 @@ export default function Home() {
 
             <div className="bella-hero-actions">
               <button type="button" className="button button-primary" onClick={handlePrimaryBooking}>
-                Đặt phòng ngay
-              </button>
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => scrollToSection("rooms")}
-              >
                 Xem hạng phòng
               </button>
+              <Link to="/lookup" className="button button-secondary">
+                Tra cứu đặt phòng
+              </Link>
             </div>
 
             <div className="home-hero-points">
@@ -172,22 +162,22 @@ export default function Home() {
           })}
         </section>
 
+        <section className="page-subsection" id="combos">
+          <SectionHeader
+            eyebrow="Combo & ưu đãi nổi bật"
+            title="Gói nghỉ dưỡng được Bella chuẩn bị sẵn."
+            copy="Phù hợp cho cặp đôi muốn nghỉ nhanh, gia đình cần tiện nghi hoặc nhóm bạn thích khám phá."
+            action={<Link to="/combos" className="button button-secondary">Xem tất cả combo</Link>}
+          />
+          <ComboGrid combos={combos.slice(0, 4)} loading={combosLoading} error={combosError} />
+        </section>
+
         <section className="page-subsection" id="rooms">
           <SectionHeader
             eyebrow="Hạng phòng nổi bật"
-            title="Chọn hạng phòng phù hợp mà không phải đọc quá nhiều."
-            copy="Bella ưu tiên hiển thị ngắn gọn: hạng phòng, diện tích, kiểu giường, điểm nổi bật và giá hiện tại. Mọi thông tin sâu hơn đều nằm ở trang chi tiết."
-            action={
-              user?.id ? (
-                <Link to="/bookings" className="button button-secondary">
-                  Đơn đặt phòng của tôi
-                </Link>
-              ) : (
-                <Link to="/login" className="button button-secondary">
-                  Đăng nhập để đặt nhanh
-                </Link>
-              )
-            }
+            title="Xem nhanh các hạng phòng nổi bật."
+            copy="Trang chủ chỉ hiển thị các lựa chọn tiêu biểu. Mở danh sách phòng để so sánh đầy đủ."
+            action={<Link to="/rooms" className="button button-secondary">Xem toàn bộ hạng phòng</Link>}
           />
 
           {loading ? (
@@ -212,17 +202,30 @@ export default function Home() {
                 <div className="room-listing-stack">
                   <div className="room-listing-intro">
                     <p className="eyebrow">
-                      {featuredRooms.length === 2 ? "Các hạng phòng khác" : "Toàn bộ hạng phòng"}
+                      {featuredRooms.length === 2 ? "Xem nhanh thêm vài lựa chọn" : "Danh sách rút gọn"}
                     </p>
                     <p className="section-copy section-copy-tight">
-                      Các lựa chọn còn lại được giữ ngắn gọn để bạn quét nhanh rồi mở chi tiết khi
-                      thấy phù hợp.
+                      Đây là phần xem nhanh. So sánh đầy đủ có ở trang danh sách phòng.
                     </p>
                   </div>
                   <div className="room-listing-grid">
                     {listingRooms.map((room) => (
                       <RoomCard key={room.code} room={room} />
                     ))}
+                  </div>
+                  <div className="home-room-footer">
+                    <Link to="/rooms" className="button button-primary">
+                      Xem đầy đủ danh sách hạng phòng
+                    </Link>
+                    {user?.id ? (
+                      <Link to="/bookings" className="button button-secondary">
+                        Đặt phòng của tôi
+                      </Link>
+                    ) : (
+                      <Link to="/login" className="button button-secondary">
+                        Đăng nhập để đặt nhanh hơn
+                      </Link>
+                    )}
                   </div>
                 </div>
               ) : null}
@@ -240,8 +243,8 @@ export default function Home() {
         <section className="page-subsection" id="amenities">
           <SectionHeader
             eyebrow="Vì sao nên ở Bella"
-            title="Tiện nghi được sắp gọn để bạn đọc nhanh và yên tâm hơn khi chọn phòng."
-            copy="Bella phù hợp với du khách muốn một nơi lưu trú sạch sẽ, dễ di chuyển và không quá phức tạp trong quá trình nhận phòng, nghỉ ngơi và đặt trực tiếp."
+            title="Tiện nghi chính được trình bày rõ ràng."
+            copy="Bella phù hợp cho kỳ nghỉ gọn gàng, thuận tiện và dễ theo dõi."
           />
 
           <div className="home-benefit-layout">
@@ -281,8 +284,8 @@ export default function Home() {
         <section className="page-subsection" id="gallery">
           <SectionHeader
             eyebrow="Không gian khách sạn"
-            title="Một vài góc nhìn giúp bạn cảm nhận Bella rõ hơn trước khi đặt."
-            copy="Ưu tiên hình ảnh lớn, dễ xem để bạn nắm nhanh phong cách phòng nghỉ, không gian chung và bối cảnh ven biển xung quanh khách sạn."
+            title="Một vài góc nhìn về Bella."
+            copy="Hình ảnh phòng nghỉ, khu chung và không gian ven biển."
           />
 
           <div className="bella-gallery">
@@ -302,8 +305,8 @@ export default function Home() {
         <section className="page-subsection" id="location">
           <SectionHeader
             eyebrow="Vị trí"
-            title="Thuận tiện để khám phá Sunset Town và khu Nam đảo Phú Quốc."
-            copy={bellaContent.property.locationCue}
+            title="Thuận tiện để khám phá Nam đảo Phú Quốc."
+            copy="Gần Sunset Town, thuận tiện đi lại và tham quan."
           />
 
           <div className="home-location-layout">
@@ -321,6 +324,18 @@ export default function Home() {
                   <span>Khoảng cách đến trung tâm</span>
                   <strong>{bellaContent.property.distanceFromCenter}</strong>
                 </div>
+              </div>
+
+              <div className="location-social-proof">
+                <p className="eyebrow">Kênh cập nhật</p>
+                <p className="location-social-copy">
+                  Theo dõi Bella Hotel Phú Quốc trên Facebook để xem thêm hình ảnh mới, thông tin
+                  lưu trú và nhịp hoạt động thực tế của khách sạn trước khi đặt.
+                </p>
+                <SocialChannelLink
+                  title="Xem fanpage Facebook"
+                  description="Mở fanpage chính thức trong tab mới để theo dõi các cập nhật gần đây của Bella."
+                />
               </div>
 
               <div className="location-nearby-list">
@@ -350,8 +365,8 @@ export default function Home() {
         <section className="page-subsection" id="reviews">
           <SectionHeader
             eyebrow="Đánh giá từ khách lưu trú"
-            title="Những điểm khiến Bella tạo cảm giác đáng tin và dễ chọn."
-            copy="Thay vì dàn trải quá nhiều phản hồi, phần này giữ lại một vài nhận xét đại diện để bạn thấy rõ ưu điểm nổi bật của khách sạn."
+            title="Những lý do khiến Bella dễ chọn."
+            copy="Một vài phản hồi tiêu biểu để bạn tham khảo nhanh trước khi đặt."
           />
 
           <div className="review-showcase">
@@ -400,19 +415,17 @@ export default function Home() {
               <h2 className="section-title section-title-small">
                 {bellaContent.property.finalCtaTitle}
               </h2>
-              <p className="section-copy">{bellaContent.property.finalCtaCopy}</p>
+              <p className="section-copy">
+                Chọn hạng phòng phù hợp và hoàn tất đặt phòng trực tiếp tại Bella.
+              </p>
             </div>
             <div className="footer-cta-actions">
               <button type="button" className="button button-primary" onClick={handlePrimaryBooking}>
-                Đặt phòng ngay
-              </button>
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => scrollToSection("rooms")}
-              >
                 Xem hạng phòng
               </button>
+              <Link to="/lookup" className="button button-secondary">
+                Tra cứu đặt phòng
+              </Link>
             </div>
           </div>
         </section>

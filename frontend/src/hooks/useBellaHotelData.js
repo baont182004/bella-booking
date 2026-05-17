@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { bellaContent } from "../content/bellaContent";
+import { getBellaRoomImages } from "../content/bellaRoomImages";
 import { bellaRoomOffers } from "../content/bellaRoomOffers";
 import { hotelApi } from "../services/api";
 
@@ -78,7 +79,13 @@ function mergeRoom(reference, liveRoom) {
     ? liveRoom.bathroom_features
     : reference.bathroomFeatures;
   const amenities = liveRoom?.amenities?.length ? liveRoom.amenities : reference.amenities;
-  const images = liveRoom?.images?.length ? liveRoom.images : reference.images;
+  const localRoomImages = getBellaRoomImages(reference.code);
+  const images =
+    localRoomImages.length > 0
+      ? localRoomImages
+      : liveRoom?.images?.length
+        ? liveRoom.images
+        : reference.images;
 
   return {
     code: liveRoom?.code || reference.code,
@@ -164,7 +171,7 @@ export function useBellaHotelData() {
         });
 
         setRooms(roomsResponse.data.rooms || []);
-      } catch (error) {
+      } catch {
         setLoadError(true);
         setRooms([]);
       } finally {

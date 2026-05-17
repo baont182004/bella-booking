@@ -1,13 +1,22 @@
 import axios from "axios";
 
+const browserProtocol =
+  typeof window !== "undefined" && window.location.protocol === "https:"
+    ? "https:"
+    : "http:";
+const browserHost =
+  typeof window !== "undefined" && window.location.hostname
+    ? window.location.hostname
+    : "localhost";
+
 const userServiceUrl =
-  import.meta.env.VITE_USER_SERVICE_URL || "http://localhost:3001";
+  import.meta.env.VITE_USER_SERVICE_URL || `${browserProtocol}//${browserHost}:3001`;
 const hotelServiceUrl =
-  import.meta.env.VITE_HOTEL_SERVICE_URL || "http://localhost:3002";
+  import.meta.env.VITE_HOTEL_SERVICE_URL || `${browserProtocol}//${browserHost}:3002`;
 const bookingServiceUrl =
-  import.meta.env.VITE_BOOKING_SERVICE_URL || "http://localhost:3003";
+  import.meta.env.VITE_BOOKING_SERVICE_URL || `${browserProtocol}//${browserHost}:3003`;
 const paymentServiceUrl =
-  import.meta.env.VITE_PAYMENT_SERVICE_URL || "http://localhost:3004";
+  import.meta.env.VITE_PAYMENT_SERVICE_URL || `${browserProtocol}//${browserHost}:3004`;
 
 export const userApi = axios.create({
   baseURL: userServiceUrl,

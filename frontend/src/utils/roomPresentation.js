@@ -229,9 +229,13 @@ export function buildRoomGallery(room, fallbackGallery = []) {
     alt: room?.displayName || "Bella room",
   }));
 
+  if (roomImages.length) {
+    return roomImages.slice(0, 6);
+  }
+
   const fallbackImages = fallbackGallery
     .filter((item) => !roomImages.some((image) => image.src === item.src))
-    .slice(0, 3);
+    .slice(0, 4);
 
-  return [...roomImages, ...fallbackImages].slice(0, 4);
+  return fallbackImages;
 }

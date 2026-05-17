@@ -1523,7 +1523,8 @@ button:disabled {
   color: var(--ink);
 }
 
-.status-pill-pending {
+.status-pill-pending,
+.status-pill-pending_payment {
   background: rgba(180, 83, 9, 0.12);
   color: var(--warning);
 }
@@ -1533,12 +1534,14 @@ button:disabled {
   color: var(--success);
 }
 
-.status-pill-cancelled {
+.status-pill-cancelled,
+.status-pill-payment_failed {
   background: rgba(180, 35, 24, 0.12);
   color: var(--danger);
 }
 
-.status-pill-completed {
+.status-pill-completed,
+.status-pill-succeeded {
   background: rgba(21, 94, 239, 0.12);
   color: var(--accent);
 }
@@ -1555,7 +1558,8 @@ button:disabled {
   padding: 1.4rem;
 }
 
-.booking-card-pending {
+.booking-card-pending,
+.booking-card-pending_payment {
   border-top: 4px solid rgba(180, 83, 9, 0.55);
 }
 
@@ -1567,7 +1571,8 @@ button:disabled {
   border-top: 4px solid rgba(21, 94, 239, 0.45);
 }
 
-.booking-card-cancelled {
+.booking-card-cancelled,
+.booking-card-payment_failed {
   border-top: 4px solid rgba(180, 35, 24, 0.45);
 }
 
@@ -1616,6 +1621,39 @@ button:disabled {
   padding: 0.95rem 1rem;
   border-radius: var(--radius-lg);
   background: rgba(16, 37, 63, 0.05);
+}
+
+.admin-list,
+.admin-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.admin-list-item,
+.admin-log-item {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.admin-list-item p,
+.admin-log-item p,
+.admin-log-item span {
+  margin: 0.3rem 0 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.admin-log-item strong {
+  display: block;
+  font-size: 0.98rem;
 }
 
 .action-grid {
@@ -2754,7 +2792,9 @@ button:disabled {
   .booking-card-header,
   .booking-total-row,
   .booking-actions,
-  .room-option-header {
+  .room-option-header,
+  .admin-list-item,
+  .admin-log-item {
     flex-direction: column;
     align-items: stretch;
   }
@@ -3410,6 +3450,502 @@ body {
   color: var(--ink-soft);
 }
 
+.footer-section-copy {
+  margin-bottom: 1rem;
+}
+
+.footer-social-channel {
+  margin-bottom: 1rem;
+}
+
+.footer-note-soft {
+  max-width: 28ch;
+}
+
+.social-channel-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(26, 53, 66, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.74);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.social-channel-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(24, 119, 242, 0.24);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 36px rgba(26, 53, 66, 0.08);
+}
+
+.social-channel-link:focus-visible {
+  outline: none;
+  border-color: rgba(24, 119, 242, 0.42);
+  box-shadow:
+    0 0 0 4px rgba(24, 119, 242, 0.14),
+    0 18px 36px rgba(26, 53, 66, 0.08);
+}
+
+.social-channel-link-compact {
+  padding: 0.85rem 0.95rem;
+  gap: 0.75rem;
+}
+
+.social-channel-link-compact .social-channel-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.social-channel-link-compact .social-channel-copy strong {
+  font-size: 0.95rem;
+}
+
+.social-channel-link-compact .social-channel-copy span {
+  font-size: 0.9rem;
+}
+
+.social-channel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(24, 119, 242, 0.12);
+  color: #1877f2;
+}
+
+.social-channel-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.social-channel-copy strong {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.social-channel-copy span {
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.social-channel-arrow {
+  margin-top: 0.12rem;
+  flex-shrink: 0;
+  color: var(--ink-soft);
+}
+
+.location-social-proof {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1.25rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid rgba(26, 53, 66, 0.08);
+}
+
+.location-social-copy {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.68;
+}
+
+.combo-page-hero,
+.combo-detail-hero {
+  overflow: hidden;
+}
+
+.combo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.15rem;
+}
+
+.combo-card {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(26, 53, 66, 0.1);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-soft);
+}
+
+.combo-card-selected {
+  border-color: rgba(40, 91, 115, 0.34);
+  box-shadow: 0 0 0 4px rgba(40, 91, 115, 0.09), var(--shadow-soft);
+}
+
+.combo-card-media {
+  position: relative;
+  min-height: 13rem;
+  background: linear-gradient(135deg, rgba(40, 91, 115, 0.12), rgba(226, 205, 172, 0.24));
+}
+
+.combo-card-media img {
+  width: 100%;
+  height: 100%;
+  min-height: 13rem;
+  object-fit: cover;
+}
+
+.combo-card-badge {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  display: inline-flex;
+  padding: 0.46rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(16, 48, 60, 0.78);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.combo-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+
+.combo-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.combo-card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.18rem;
+  line-height: 1.3;
+}
+
+.combo-card p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  line-height: 1.62;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.combo-price {
+  min-width: 7rem;
+  color: var(--accent);
+  text-align: right;
+  line-height: 1.35;
+}
+
+.combo-meta-row,
+.combo-service-list,
+.combo-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.combo-meta-row span,
+.combo-service-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.87rem;
+  line-height: 1.45;
+}
+
+.combo-service-list {
+  margin-top: auto;
+}
+
+.combo-service-list span {
+  padding: 0.45rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(40, 91, 115, 0.08);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.combo-card-actions {
+  margin-top: 0.2rem;
+}
+
+.combo-card-actions .button {
+  flex: 1 1 9rem;
+}
+
+.combo-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(26, 53, 66, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: var(--shadow-soft);
+}
+
+.combo-filter-group,
+.combo-filter-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.combo-filter-pill,
+.combo-select {
+  min-height: 2.7rem;
+  border: 1px solid rgba(26, 53, 66, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink-soft);
+  font-weight: 800;
+}
+
+.combo-filter-pill {
+  padding: 0 0.9rem;
+}
+
+.combo-filter-pill-active {
+  background: var(--accent);
+  color: white;
+}
+
+.combo-select {
+  padding: 0 0.9rem;
+}
+
+.combo-empty-state {
+  min-height: 14rem;
+}
+
+.combo-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 1.2rem;
+  align-items: stretch;
+}
+
+.combo-detail-banner img {
+  width: 100%;
+  min-height: 28rem;
+  height: 100%;
+  border-radius: 28px;
+  object-fit: cover;
+}
+
+.combo-detail-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.1rem;
+  padding: 2rem;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadow-soft);
+}
+
+.combo-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.combo-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1rem;
+}
+
+.combo-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.combo-service-list-large span {
+  border-radius: 16px;
+}
+
+.combo-terms-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+
+.combo-picker-section {
+  padding: 1rem;
+  border: 1px solid rgba(40, 91, 115, 0.1);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(237, 246, 251, 0.7), rgba(255, 255, 255, 0.74));
+}
+
+.combo-none-option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(26, 53, 66, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ink);
+  text-align: left;
+}
+
+.combo-none-option-active {
+  border-color: rgba(40, 91, 115, 0.32);
+  box-shadow: 0 0 0 4px rgba(40, 91, 115, 0.08);
+}
+
+.combo-picker-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.combo-picker-grid .combo-card {
+  border-radius: 20px;
+}
+
+.combo-picker-grid .combo-card-media {
+  min-height: 8rem;
+}
+
+.combo-picker-grid .combo-card-media img {
+  min-height: 8rem;
+}
+
+.combo-picker-grid .combo-card-body {
+  padding: 0.95rem;
+}
+
+.booking-summary-card,
+.price-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(26, 53, 66, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.booking-summary-head,
+.price-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.booking-summary-head span,
+.price-breakdown-row span {
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.booking-summary-head strong {
+  color: var(--accent);
+  font-size: 1.2rem;
+}
+
+.booking-summary-lines {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.booking-summary-lines span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.price-breakdown-total {
+  margin-top: 0.2rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(26, 53, 66, 0.1);
+}
+
+.price-breakdown-total strong {
+  color: var(--accent);
+  font-size: 1.2rem;
+}
+
+.promotion-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.booking-confirmation-row-stack {
+  align-items: flex-start;
+}
+
+.combo-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 20, 25, 0.38);
+}
+
+.combo-modal {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: min(86vh, 820px);
+  overflow: auto;
+  border-radius: 28px;
+  background: var(--surface-strong);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.combo-modal-close {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  z-index: 2;
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
 @media (max-width: 1100px) {
   .page-section-home {
     padding-top: 3.1rem;
@@ -3661,5 +4197,28 @@ body {
 
   .nav-mobile {
     width: calc(100vw - 1rem);
+  }
+
+  .combo-grid,
+  .combo-detail-hero,
+  .combo-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .combo-filter-bar,
+  .combo-card-head,
+  .booking-summary-head,
+  .price-breakdown-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .combo-price {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .promotion-code-row {
+    grid-template-columns: 1fr;
   }
 }
