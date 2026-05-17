@@ -1,0 +1,233 @@
+services:
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - bella-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - bella-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - bella-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - bella-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/bella_booking}
+      MONGODB_URI: ${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_booking}}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://bella-booking.vercel.app,https://bella-booking-api.duckdns.org,http://localhost:5173,http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://bella-booking.vercel.app}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      ENABLE_DEMO_ADMIN_BOOTSTRAP: ${ENABLE_DEMO_ADMIN_BOOTSTRAP:-false}
+      DEMO_ADMIN_SYNC_PASSWORD: ${DEMO_ADMIN_SYNC_PASSWORD:-false}
+      DEMO_ADMIN_EMAIL: ${DEMO_ADMIN_EMAIL:-admin@example.com}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-change_me_admin_password}
+      DEMO_ADMIN_FIRST_NAME: ${DEMO_ADMIN_FIRST_NAME:-Demo}
+      DEMO_ADMIN_LAST_NAME: ${DEMO_ADMIN_LAST_NAME:-Admin}
+      DEMO_ADMIN_PHONE: ${DEMO_ADMIN_PHONE:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bella-network
+
+  hotel-service:
+    build:
+      context: ./services/hotel-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3002
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/bella_booking}
+      MONGODB_URI: ${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_booking}}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://bella-booking.vercel.app,https://bella-booking-api.duckdns.org,http://localhost:5173,http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://bella-booking.vercel.app}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      BELLA_METADATA_FILE: ${BELLA_METADATA_FILE:-/app/data/bella-room-metadata.json}
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bella-network
+
+  booking-service:
+    build:
+      context: ./services/booking-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3003:3003"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3003
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/bella_booking}
+      MONGODB_URI: ${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_booking}}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      KAFKA_BROKER: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://bella-booking.vercel.app,https://bella-booking-api.duckdns.org,http://localhost:5173,http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://bella-booking.vercel.app}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      PAYMENT_HOLD_WINDOW_MINUTES: ${PAYMENT_HOLD_WINDOW_MINUTES:-30}
+      MONGODB_TRANSACTIONS_ENABLED: ${MONGODB_TRANSACTIONS_ENABLED:-false}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - bella-network
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3004:3004"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3004
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/bella_booking}
+      MONGODB_URI: ${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_booking}}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      KAFKA_BROKER: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://bella-booking.vercel.app,https://bella-booking-api.duckdns.org,http://localhost:5173,http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://bella-booking.vercel.app}
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-https://bella-booking.vercel.app}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://bella-booking-api.duckdns.org}
+      PAYMENT_PUBLIC_BASE_URL: ${PAYMENT_PUBLIC_BASE_URL:-https://bella-booking-api.duckdns.org}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYMENT_CHECKOUT_TTL_MINUTES: ${PAYMENT_CHECKOUT_TTL_MINUTES:-30}
+      PAYMENT_WEBHOOK_TOLERANCE_SECONDS: ${PAYMENT_WEBHOOK_TOLERANCE_SECONDS:-300}
+      MOCK_PAYMENT_WEBHOOK_SECRET: ${MOCK_PAYMENT_WEBHOOK_SECRET:-change_me_mock_webhook_secret}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_API_VERSION: ${STRIPE_API_VERSION:-}
+      MONGODB_TRANSACTIONS_ENABLED: ${MONGODB_TRANSACTIONS_ENABLED:-false}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - bella-network
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3005:3005"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3005
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/bella_booking}
+      MONGODB_URI: ${MONGODB_URI:-${MONGO_URI:-mongodb://mongo:27017/bella_booking}}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      KAFKA_BROKER: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://bella-booking.vercel.app,https://bella-booking-api.duckdns.org,http://localhost:5173,http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://bella-booking.vercel.app}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - bella-network
+
+networks:
+  bella-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  redis_data:

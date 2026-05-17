@@ -5,6 +5,10 @@ node_modules/
 # Environment variables (root and all service subdirectories)
 .env
 **/.env
+.env.prod
+**/.env.prod
+.env.production
+**/.env.production
 .env.local
 **/.env.local
 .env.*.local

@@ -9,6 +9,13 @@ let kafka;
 let producer;
 let outboxInterval;
 
+function getKafkaBrokers() {
+  return (process.env.KAFKA_BOOTSTRAP_SERVERS || process.env.KAFKA_BROKER || "localhost:9092")
+    .split(",")
+    .map((broker) => broker.trim())
+    .filter(Boolean);
+}
+
 function buildBackoffDelay(attempts = 0) {
   return Math.min(5 * 60 * 1000, OUTBOX_RETRY_BASE_MS * Math.max(1, attempts + 1));
 }
@@ -17,7 +24,7 @@ export async function initKafka() {
   try {
     kafka = new Kafka({
       clientId: OUTBOX_SERVICE_NAME,
-      brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
+      brokers: getKafkaBrokers(),
       retry: {
         initialRetryTime: 100,
         retries: 8,

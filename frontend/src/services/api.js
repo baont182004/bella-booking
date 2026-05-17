@@ -1,5 +1,9 @@
 import axios from "axios";
 
+function trimTrailingSlash(value = "") {
+  return value.replace(/\/+$/, "");
+}
+
 const browserProtocol =
   typeof window !== "undefined" && window.location.protocol === "https:"
     ? "https:"
@@ -9,14 +13,26 @@ const browserHost =
     ? window.location.hostname
     : "localhost";
 
+const apiBaseUrl = import.meta.env.VITE_API_URL
+  ? trimTrailingSlash(import.meta.env.VITE_API_URL)
+  : "";
+
 const userServiceUrl =
-  import.meta.env.VITE_USER_SERVICE_URL || `${browserProtocol}//${browserHost}:3001`;
+  apiBaseUrl ||
+  import.meta.env.VITE_USER_SERVICE_URL ||
+  `${browserProtocol}//${browserHost}:3001`;
 const hotelServiceUrl =
-  import.meta.env.VITE_HOTEL_SERVICE_URL || `${browserProtocol}//${browserHost}:3002`;
+  apiBaseUrl ||
+  import.meta.env.VITE_HOTEL_SERVICE_URL ||
+  `${browserProtocol}//${browserHost}:3002`;
 const bookingServiceUrl =
-  import.meta.env.VITE_BOOKING_SERVICE_URL || `${browserProtocol}//${browserHost}:3003`;
+  apiBaseUrl ||
+  import.meta.env.VITE_BOOKING_SERVICE_URL ||
+  `${browserProtocol}//${browserHost}:3003`;
 const paymentServiceUrl =
-  import.meta.env.VITE_PAYMENT_SERVICE_URL || `${browserProtocol}//${browserHost}:3004`;
+  apiBaseUrl ||
+  import.meta.env.VITE_PAYMENT_SERVICE_URL ||
+  `${browserProtocol}//${browserHost}:3004`;
 
 export const userApi = axios.create({
   baseURL: userServiceUrl,

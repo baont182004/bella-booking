@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const mongoUri =
   process.env.MONGODB_URI ||
+  process.env.MONGO_URI ||
   "mongodb://127.0.0.1:27017/bella_hotel";
 
 const bellaMetadata = JSON.parse(

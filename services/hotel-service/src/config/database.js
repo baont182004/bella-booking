@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 function getMongoUri() {
-  return process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/bella_hotel";
+  return process.env.MONGODB_URI || process.env.MONGO_URI || "mongodb://127.0.0.1:27017/bella_hotel";
 }
 
 const userSchema = new mongoose.Schema(

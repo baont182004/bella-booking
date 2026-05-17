@@ -8,11 +8,18 @@ import {
 let kafka;
 let consumer;
 
+function getKafkaBrokers() {
+  return (process.env.KAFKA_BOOTSTRAP_SERVERS || process.env.KAFKA_BROKER || "localhost:9092")
+    .split(",")
+    .map((broker) => broker.trim())
+    .filter(Boolean);
+}
+
 async function initKafka() {
   try {
     kafka = new Kafka({
       clientId: "notification-service",
-      brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
+      brokers: getKafkaBrokers(),
       retry: {
         initialRetryTime: 100,
         retries: 8,

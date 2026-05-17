@@ -14,7 +14,9 @@ const PORT = process.env.PORT || 3005;
 const isDevelopment = process.env.NODE_ENV === "development";
 let notificationDependenciesReady = false;
 const allowedOrigins = (
+  process.env.CORS_ORIGINS ||
   process.env.CORS_ORIGIN ||
+  process.env.FRONTEND_URL ||
   "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"
 )
   .split(",")
