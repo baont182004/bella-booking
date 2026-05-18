@@ -3,9 +3,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import comboRoutes from './routes/combo.routes.js';
 import hotelRoutes from './routes/hotel.routes.js';
 import { connectDatabase, testConnection } from './config/database.js';
 import { connectRedis } from './config/redis.js';
+import { seedDefaultCombosIfEmpty } from './services/comboSeed.js';
 
 dotenv.config();
 
@@ -60,6 +62,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Routes
+app.use('/combos', comboRoutes);
 app.use('/hotels', hotelRoutes);
 
 // Error handler
@@ -78,6 +81,10 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     await connectDatabase();
+    const comboSeedResult = await seedDefaultCombosIfEmpty();
+    if (comboSeedResult.inserted > 0) {
+      console.log(`Seeded ${comboSeedResult.inserted} default Bella combos`);
+    }
     await connectRedis();
     
     app.listen(PORT, () => {

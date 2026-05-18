@@ -125,9 +125,47 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true, collection: "bookings" },
 );
 
+const comboSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, lowercase: true, trim: true },
+    description: { type: String, default: "" },
+    room_types_allowed: { type: [String], default: [] },
+    duration_label: { type: String, required: true },
+    nights: { type: Number, required: true, min: 1 },
+    allowed_nights: { type: [Number], default: [] },
+    days: { type: Number, required: true, min: 1 },
+    min_guests: { type: Number, default: 1, min: 1 },
+    max_guests: { type: Number, default: null, min: 1 },
+    base_price: { type: Number, required: true, min: 0 },
+    price_type: {
+      type: String,
+      enum: ["fixed", "per_person", "from_price"],
+      default: "fixed",
+    },
+    currency: { type: String, default: "VND" },
+    included_services: { type: [String], default: [] },
+    suitable_for: { type: String, default: "" },
+    badge_label: { type: String, default: "" },
+    image_url: { type: String, default: "" },
+    icon_key: { type: String, default: "" },
+    is_active: { type: Boolean, default: true },
+    valid_from: { type: Date, default: null },
+    valid_to: { type: Date, default: null },
+    terms_and_conditions: { type: [String], default: [] },
+    display_order: { type: Number, default: 100 },
+  },
+  { timestamps: true, collection: "combos" },
+);
+
+comboSchema.index({ slug: 1 }, { unique: true });
+comboSchema.index({ is_active: 1, display_order: 1, base_price: 1 });
+comboSchema.index({ room_types_allowed: 1 });
+
 export const Hotel = mongoose.model("Hotel", hotelSchema);
 export const Room = mongoose.model("Room", roomSchema);
 export const Booking = mongoose.model("Booking", bookingSchema);
+export const Combo = mongoose.models.Combo || mongoose.model("Combo", comboSchema);
 export const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 export async function connectDatabase() {
