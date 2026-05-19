@@ -10,6 +10,12 @@
 
 Keep `PAYMENT_PROVIDER=mock` for project demos unless real gateway credentials are configured.
 
+Rollback from payOS to mock is only an env change plus payment-service rebuild:
+
+```env
+PAYMENT_PROVIDER=mock
+```
+
 ## Required URLs
 
 - `PAYMENT_PUBLIC_BASE_URL`: public API origin used to build hosted checkout and webhook URLs.
@@ -51,6 +57,13 @@ The payOS return/cancel URL is only a UX redirect back to `/payments/return`. Bo
 
 Webhook verification uses the payOS `signature` value over the webhook `data` object with `PAYOS_CHECKSUM_KEY`. Duplicate webhook deliveries are deduplicated by provider event id before mutating payment or booking state.
 
+Webhook behavior:
+
+- Empty body, missing `data/signature`, or invalid signature returns `400`.
+- A valid payOS test/confirm payload that does not match a Bella payment returns `200` with `reason=payment_not_found`.
+- Duplicate webhook delivery returns `200` idempotently.
+- Success after a booking has already expired/cancelled is not ignored: the payment is marked succeeded, a risk flag/status reason is stored, and the booking is left for manual review instead of silently confirming a stale hold.
+
 To test QR checkout:
 
 1. Configure a payOS sandbox account and set `PAYMENT_PROVIDER=payos`.
@@ -58,6 +71,35 @@ To test QR checkout:
 3. Create a booking, then create checkout with `paymentMethodType=bank_transfer`.
 4. Open `checkoutSession.checkoutUrl` and complete or cancel the payOS flow.
 5. Reload `/payments/return?booking_id=...&session_id=...`; the page reads backend state rather than trusting redirect query params.
+
+## State Machine
+
+Payment statuses:
+
+- `pending`
+- `processing`
+- `succeeded`
+- `failed`
+- `cancelled`
+- `expired`
+- `refunded`
+- `partially_refunded`
+
+Booking statuses:
+
+- `pending_payment`
+- `confirmed`
+- `payment_failed`
+- `cancelled`
+- `expired`
+- `completed`
+
+Important guards:
+
+- `succeeded` payment is never downgraded by late failed/cancelled/expired webhooks.
+- `confirmed` booking is never expired by stale hold checks.
+- A booking with an already succeeded payment is confirmed instead of expired if a hold expiry check runs late.
+- Checkout creation is locked per booking and reuses a live provider session/link for the same provider and payment method.
 
 ## Mock Security
 
@@ -125,8 +167,42 @@ curl -X POST "$API/payments/checkout-sessions/SESSION_ID/cancel" \
 
 Mock success/failure/expired/cancel actions are available from the hosted mock checkout page returned in `checkoutSession.checkoutUrl`.
 
+Admin reconciliation for payOS:
+
+```sh
+curl -X POST "$API/payments/PAYMENT_ID/reconcile" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Admin payment list:
+
+```sh
+curl "$API/payments/admin/payments?status=pending&provider=payos" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+## Troubleshooting
+
+- Webhook `400`: payload is malformed or signature does not match `PAYOS_CHECKSUM_KEY`.
+- Webhook `500`: should not happen for payOS after hardening; check `payment-service` logs for `payos webhook error`.
+- `payment_not_found`: payOS sent a valid confirm/test payload or a webhook for an orderCode not created by this environment.
+- Invalid signature: confirm the payOS channel checksum key and make sure the raw JSON body is proxied unchanged by Nginx.
+- Booking not confirmed: check `payments.status`, `payments.risk_flags`, webhook logs, and run admin reconciliation.
+- Frontend does not show QR: verify `POST /payments/checkout-sessions` returns `checkoutSession.checkoutUrl` or `checkoutSession.qrCode`.
+- CORS/API URL: `FRONTEND_PUBLIC_URL`, `PAYMENT_PUBLIC_BASE_URL`, and Nginx `/payments` proxy must match production domains.
+
 ## Deployment Notes
 
 Nginx must proxy `/payments` to `payment-service:3004`. Do not expose service port `3004` publicly; keep Docker bound to `127.0.0.1`.
 
 No real card data is collected by Bella in mock or Stripe hosted checkout flows.
+
+Production rebuild:
+
+```sh
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build payment-service booking-service
+```
+
+Frontend changes require a Vercel redeploy. Backend-only payOS env changes only require rebuilding/restarting `payment-service`.
+
+Refund policy: user cancellation before payment cancels the booking/hold. After a succeeded payment, user self-cancel is blocked and support/admin review is required. Admin refund exists only where the selected provider adapter supports it; do not mark real money refunded manually without an operations process.

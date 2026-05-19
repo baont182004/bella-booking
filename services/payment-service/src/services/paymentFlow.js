@@ -70,6 +70,23 @@ function isPaymentOpen(status) {
   return OPEN_PAYMENT_STATUSES.has(status);
 }
 
+function appendPaymentStatusHistory(payment, entry = {}) {
+  const currentHistory = Array.isArray(payment.status_history) ? payment.status_history : [];
+  payment.status_history = [
+    ...currentHistory.slice(-49),
+    {
+      at: entry.at || new Date(),
+      previousStatus: entry.previousStatus || null,
+      nextStatus: entry.nextStatus || getPaymentStatus(payment),
+      previousBookingStatus: entry.previousBookingStatus || null,
+      nextBookingStatus: entry.nextBookingStatus || null,
+      providerEventId: entry.providerEventId || payment.provider_event_id || null,
+      reason: entry.reason || payment.status_reason || null,
+      source: entry.source || "payment-service",
+    },
+  ];
+}
+
 function sanitizeAuditValue(value, key = "") {
   const sensitiveKeyPattern =
     /secret|signature|authorization|raw[_-]?body|provider[_-]?payload|access[_-]?token/i;
@@ -636,6 +653,46 @@ export async function markBookingHoldExpiredIfNeeded(booking, actor = null) {
   const timestamp = new Date();
   const payment = await Payment.findOne({ booking_id: booking._id });
   const previousPaymentStatus = getPaymentStatus(payment);
+
+  if (isPaymentSuccessful(previousPaymentStatus)) {
+    booking.status = "confirmed";
+    booking.payment_expires_at = null;
+    booking.expired_at = null;
+    touchBookingStatusTimestamps(booking, "confirmed", timestamp);
+
+    await withOptionalTransaction(async (session) => {
+      await booking.save(session ? { session } : undefined);
+      await queueOutboxEvents(
+        [
+          {
+            topic: "booking-status-updated",
+            eventKey: `${booking._id.toString()}:confirmed-after-paid-hold:${timestamp.getTime()}`,
+            aggregateType: "booking",
+            aggregateId: booking._id.toString(),
+            payload: buildBookingStatusPayload(booking),
+          },
+        ],
+        { session, flush: false },
+      );
+    });
+    triggerOutboxFlush();
+
+    await recordAuditLog({
+      action: "booking.hold_expiry_skipped_paid",
+      actor,
+      entityType: "booking",
+      entityId: booking._id.toString(),
+      metadata: {
+        bookingReference: booking.booking_reference || null,
+        previousBookingStatus,
+        previousPaymentStatus,
+        reason: "payment_already_succeeded",
+      },
+    });
+
+    return { expired: false, booking, payment };
+  }
+
   booking.status = "expired";
   touchBookingStatusTimestamps(booking, "expired", timestamp);
 
@@ -706,7 +763,7 @@ export async function createHostedCheckoutSession({
   const currentStatus = getPaymentStatus(payment);
   const nextIdempotencyKey = randomUUID();
   if (isPaymentSuccessful(currentStatus)) {
-    throw Object.assign(new Error("Payment has already succeeded"), { status: 409 });
+    throw Object.assign(new Error("Đơn đặt phòng này đã thanh toán thành công."), { status: 409 });
   }
   if (currentStatus === "refunded" || currentStatus === "partially_refunded") {
     throw Object.assign(new Error("Refunded payments cannot be reprocessed here"), { status: 409 });
@@ -1114,12 +1171,24 @@ export async function processVerifiedProviderEvent({
             booking.status = "confirmed";
             booking.payment_expires_at = null;
             booking.expired_at = null;
+            payment.status_reason = "succeeded_by_webhook";
             touchBookingStatusTimestamps(booking, "confirmed", now);
           } else if (!["confirmed", "completed"].includes(booking.status)) {
             payment.risk_flags = dedupeStrings([
               ...(payment.risk_flags || []),
               `booking_${booking.status}_before_payment_confirmation`,
+              `late_success_after_${booking.status}`,
             ]);
+            payment.status_reason = `late_success_after_${booking.status}`;
+            console.error("Payment succeeded after booking reached a terminal state", {
+              paymentId: payment._id.toString(),
+              bookingId: booking._id.toString(),
+              bookingReference: booking.booking_reference || null,
+              previousPaymentStatus,
+              previousBookingStatus,
+              provider: payment.provider,
+              providerEventId: normalizedEvent.providerEventId,
+            });
           }
         }
       }
@@ -1178,6 +1247,16 @@ export async function processVerifiedProviderEvent({
     }
 
     syncLegacyPaymentFields(payment);
+    appendPaymentStatusHistory(payment, {
+      at: now,
+      previousStatus: previousPaymentStatus,
+      nextStatus: getPaymentStatus(payment),
+      previousBookingStatus,
+      nextBookingStatus: booking.status,
+      providerEventId: normalizedEvent.providerEventId,
+      reason: payment.status_reason || normalizedEvent.failureCode || normalizedStatus,
+      source: "provider_webhook",
+    });
     eventRecord.payment_id = payment._id;
     eventRecord.booking_id = booking._id;
     eventRecord.status = "processed";
@@ -1226,6 +1305,104 @@ export async function processVerifiedProviderEvent({
   } finally {
     await releasePaymentLock(paymentLock);
   }
+}
+
+export async function reconcilePayment({ payment, booking, actor }) {
+  const provider = getPaymentProvider(payment.provider);
+  if (typeof provider.getProviderPaymentStatus !== "function") {
+    await recordAuditLog({
+      action: "payment.reconciliation_skipped",
+      actor,
+      entityType: "payment",
+      entityId: payment._id.toString(),
+      metadata: {
+        bookingId: booking._id.toString(),
+        provider: payment.provider,
+        reason: "provider_status_query_not_supported",
+      },
+    });
+
+    return {
+      reconciled: false,
+      reason: "provider_status_query_not_supported",
+      payment,
+      booking,
+    };
+  }
+
+  let normalizedEvent;
+  try {
+    normalizedEvent = await provider.getProviderPaymentStatus({
+      payment,
+      booking,
+    });
+  } catch (error) {
+    await recordAuditLog({
+      action: "payment.reconciliation_failed",
+      actor,
+      entityType: "payment",
+      entityId: payment._id.toString(),
+      metadata: {
+        bookingId: booking._id.toString(),
+        provider: payment.provider,
+        providerSessionId: payment.provider_session_id || null,
+        providerIntentId: payment.provider_intent_id || null,
+        reason: error?.message || "provider_status_query_failed",
+      },
+    });
+    throw error;
+  }
+
+  if (!normalizedEvent || normalizedEvent.status === "processing") {
+    await recordAuditLog({
+      action: "payment.reconciliation_no_change",
+      actor,
+      entityType: "payment",
+      entityId: payment._id.toString(),
+      metadata: {
+        bookingId: booking._id.toString(),
+        provider: payment.provider,
+        providerSessionId: payment.provider_session_id || null,
+        providerIntentId: payment.provider_intent_id || null,
+        providerStatus: normalizedEvent?.status || null,
+      },
+    });
+
+    return {
+      reconciled: false,
+      reason: "provider_status_not_terminal",
+      payment,
+      booking,
+    };
+  }
+
+  const result = await processVerifiedProviderEvent({
+    normalizedEvent: {
+      ...normalizedEvent,
+      providerEventId: normalizedEvent.providerEventId || `reconcile:${payment._id.toString()}:${normalizedEvent.status}`,
+    },
+    verifiedAt: new Date(),
+  });
+
+  await recordAuditLog({
+    action: "payment.reconciliation_run",
+    actor,
+    entityType: "payment",
+    entityId: payment._id.toString(),
+    metadata: {
+      bookingId: booking._id.toString(),
+      provider: payment.provider,
+      providerSessionId: payment.provider_session_id || null,
+      providerIntentId: payment.provider_intent_id || null,
+      providerStatus: normalizedEvent.status,
+      duplicate: result.duplicate || false,
+    },
+  });
+
+  return {
+    reconciled: true,
+    ...result,
+  };
 }
 
 export async function refundPayment({ payment, booking, actor }) {

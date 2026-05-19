@@ -4,8 +4,17 @@ import {
   findPaymentReferenceForProviderEvent,
   processVerifiedProviderEvent,
 } from "../services/paymentFlow.js";
+import { createRateLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
+const webhookRateLimit = createRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  maxRequests: 120,
+  message: "Too many webhook requests",
+  keyBuilder: (req) =>
+    `${String(req.ip || "unknown").replace(/^::ffff:/, "")}:${req.params.provider || req.query.provider || "default"}`,
+  prefix: "payment-webhook",
+});
 
 function isPayosProvider(providerName) {
   return String(providerName || "").toLowerCase() === "payos";
@@ -258,12 +267,12 @@ const rawJsonBody = express.raw({
   limit: "128kb",
 });
 
-router.post("/", rawJsonBody, async (req, res) => {
+router.post("/", webhookRateLimit, rawJsonBody, async (req, res) => {
   const providerName = req.query.provider || req.get("x-payment-provider") || process.env.PAYMENT_PROVIDER || "mock";
   return handleProviderWebhook(req, res, providerName);
 });
 
-router.post("/:provider", rawJsonBody, async (req, res) => {
+router.post("/:provider", webhookRateLimit, rawJsonBody, async (req, res) => {
   return handleProviderWebhook(req, res, req.params.provider);
 });
 

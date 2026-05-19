@@ -16,6 +16,7 @@ import {
   markBookingHoldExpiredIfNeeded,
   markPaymentExpiredIfNeeded,
   processVerifiedProviderEvent,
+  reconcilePayment,
   recordAuditLog,
   refundPayment,
   releasePaymentLock,
@@ -43,6 +44,15 @@ const checkoutSessionSchema = Joi.object({
 
 const refundSchema = Joi.object({
   reason: Joi.string().trim().max(300).optional(),
+}).unknown(false);
+
+const adminPaymentListQuerySchema = Joi.object({
+  status: Joi.string()
+    .valid("pending", "processing", "authorized", "succeeded", "failed", "cancelled", "refunded", "partially_refunded", "expired")
+    .optional(),
+  provider: Joi.string().trim().max(40).optional(),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(50).default(20),
 }).unknown(false);
 
 const hostedCheckoutActionSchema = Joi.object({
@@ -379,6 +389,18 @@ async function createCheckoutSessionHandler(req, res) {
       paymentMethodType: value.paymentMethodType,
     });
 
+    console.info("payment checkout session ready", {
+      bookingId: booking._id.toString(),
+      paymentId: payment._id.toString(),
+      userId: req.user.id,
+      provider: payment.provider,
+      providerSessionId: payment.provider_session_id || null,
+      providerIntentId: payment.provider_intent_id || null,
+      paymentMethodType: payment.payment_method_type,
+      status: getPaymentStatus(payment),
+      reused: checkoutSession.reused || false,
+    });
+
     res.status(checkoutSession.reused ? 200 : 201).json({
       message: checkoutSession.reused
         ? "Existing checkout session is still active"
@@ -400,7 +422,7 @@ async function createCheckoutSessionHandler(req, res) {
 
 router.post(["/checkout-sessions", "/checkout"], authenticate, paymentRateLimit, createCheckoutSessionHandler);
 
-router.get("/checkout-sessions/:sessionId/status", authenticate, async (req, res) => {
+router.get("/checkout-sessions/:sessionId/status", authenticate, paymentRateLimit, async (req, res) => {
   let paymentLock = null;
 
   try {
@@ -433,6 +455,115 @@ router.get("/checkout-sessions/:sessionId/status", authenticate, async (req, res
   } catch (error) {
     console.error("Get checkout session status error:", error);
     res.status(500).json({ error: "Failed to fetch checkout status" });
+  } finally {
+    await releasePaymentLock(paymentLock);
+  }
+});
+
+router.get("/admin/payments", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    const { error, value } = adminPaymentListQuerySchema.validate(req.query);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const where = {};
+    if (value.status) {
+      where.status = value.status;
+    }
+    if (value.provider) {
+      where.provider = value.provider;
+    }
+
+    const [payments, total] = await Promise.all([
+      Payment.find(where)
+        .sort({ updatedAt: -1 })
+        .skip((value.page - 1) * value.limit)
+        .limit(value.limit)
+        .lean(),
+      Payment.countDocuments(where),
+    ]);
+
+    res.json({
+      payments: payments.map((payment) => ({
+        id: payment._id.toString(),
+        bookingId: payment.booking_id?.toString?.() || String(payment.booking_id || ""),
+        provider: payment.provider,
+        providerSessionId: payment.provider_session_id || null,
+        providerIntentId: payment.provider_intent_id || null,
+        providerPaymentId: payment.provider_payment_id || null,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status || payment.payment_status,
+        paymentMethodType: payment.payment_method_type || payment.payment_method || null,
+        riskFlags: payment.risk_flags || [],
+        statusReason: payment.status_reason || null,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      })),
+      pagination: {
+        page: value.page,
+        limit: value.limit,
+        total,
+        totalPages: Math.ceil(total / value.limit) || 1,
+      },
+    });
+  } catch (error) {
+    console.error("Admin list payments error:", error);
+    res.status(500).json({ error: "Failed to list payments" });
+  }
+});
+
+router.post("/:id/reconcile", authenticate, requireRole("admin"), paymentRateLimit, async (req, res) => {
+  let paymentLock = null;
+
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid payment id" });
+    }
+
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    paymentLock = await acquirePaymentLock(payment.booking_id.toString());
+    if (!paymentLock) {
+      return res.status(409).json({ error: "Payment reconciliation is already running" });
+    }
+
+    const lockedPayment = await Payment.findById(req.params.id);
+    if (!lockedPayment) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    const booking = await loadBellaBookingById(lockedPayment.booking_id.toString());
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    await releasePaymentLock(paymentLock);
+    paymentLock = null;
+
+    const result = await reconcilePayment({
+      payment: lockedPayment,
+      booking,
+      actor: req.user,
+    });
+
+    res.json({
+      message: result.reconciled
+        ? "Payment reconciled successfully"
+        : "Provider status is not terminal or reconciliation is unsupported",
+      reason: result.reason || null,
+      duplicate: result.duplicate || false,
+      payment: serializePayment(result.payment || lockedPayment),
+      booking: serializeBookingSummary(result.booking || booking),
+    });
+  } catch (error) {
+    console.error("Reconcile payment error:", error);
+    const status = Number.isInteger(error.status) ? error.status : 500;
+    res.status(status).json({ error: status === 500 ? "Failed to reconcile payment" : error.message });
   } finally {
     await releasePaymentLock(paymentLock);
   }
@@ -606,7 +737,7 @@ router.post("/hosted/mock/:sessionId/actions", async (req, res) => {
   }
 });
 
-router.get("/booking/:bookingId", authenticate, async (req, res) => {
+router.get("/booking/:bookingId", authenticate, paymentRateLimit, async (req, res) => {
   let paymentLock = null;
 
   try {
@@ -648,7 +779,7 @@ router.get("/booking/:bookingId", authenticate, async (req, res) => {
   }
 });
 
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", authenticate, paymentRateLimit, async (req, res) => {
   let paymentLock = null;
 
   try {

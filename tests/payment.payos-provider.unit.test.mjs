@@ -239,6 +239,24 @@ test("payOS failed, cancelled, and expired webhooks normalize to terminal status
   });
 });
 
+test("payOS explicit terminal status wins over top-level success flag", async () => {
+  await withPayosEnv({}, async () => {
+    const event = buildSignedPayosWebhook({
+      orderCode: 123456789,
+      paymentLinkId: "payos_link_123",
+      amount: 1728000,
+      currency: "VND",
+      status: "CANCELLED",
+      code: "00",
+      desc: "Đã hủy",
+    });
+
+    const verifiedEvent = payosProvider.verifyWebhook({ rawBody: JSON.stringify(event) });
+    const normalizedEvent = payosProvider.normalizeWebhookEvent(verifiedEvent);
+    assert.equal(normalizedEvent.status, "cancelled");
+  });
+});
+
 test("payOS duplicate webhook payloads produce the same provider event id", async () => {
   await withPayosEnv({}, async () => {
     const webhook = buildSignedPayosWebhook({
@@ -260,5 +278,48 @@ test("payOS duplicate webhook payloads produce the same provider event id", asyn
 
     assert.equal(first.providerEventId, second.providerEventId);
     assert.equal(first.providerEventId, "payos:payos_link_123:cancelled");
+  });
+});
+
+test("payOS reconciliation query normalizes provider status without frontend amount input", async () => {
+  await withPayosEnv({}, async () => {
+    const calls = [];
+    setPayosFetchFactoryForTests(() => async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: "00",
+          desc: "success",
+          data: {
+            orderCode: 123456789,
+            paymentLinkId: "payos_link_123",
+            reference: "TF123",
+            amount: 1728000,
+            currency: "VND",
+            status: "PAID",
+            code: "00",
+            desc: "Thành công",
+          },
+        }),
+      };
+    });
+
+    const normalizedEvent = await payosProvider.getProviderPaymentStatus({
+      payment: {
+        ...payment,
+        amount: 1728000,
+        provider_intent_id: "123456789",
+        provider_session_id: "payos_link_123",
+      },
+    });
+
+    assert.equal(calls[0].url, "https://api-merchant.payos.vn/v2/payment-requests/123456789");
+    assert.equal(calls[0].options.headers["x-client-id"], "payos_client_test");
+    assert.equal(normalizedEvent.status, "succeeded");
+    assert.equal(normalizedEvent.providerIntentId, "123456789");
+    assert.equal(normalizedEvent.providerSessionId, "payos_link_123");
+    assert.equal(normalizedEvent.amount, 1728000);
   });
 });

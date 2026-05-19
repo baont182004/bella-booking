@@ -144,6 +144,7 @@ const paymentSchema = new mongoose.Schema(
     risk_flags: { type: [String], default: [] },
     provider_payload_summary: { type: mongoose.Schema.Types.Mixed, default: {} },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    status_history: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   { timestamps: true, collection: "payments" },
 );

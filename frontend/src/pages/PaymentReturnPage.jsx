@@ -10,6 +10,7 @@ import {
 } from "../utils/formatters";
 
 const terminalPaymentStatuses = new Set(["authorized", "succeeded", "failed", "cancelled", "refunded", "expired"]);
+const MAX_POLL_ATTEMPTS = 24;
 
 function isTerminalStatus(status) {
   return terminalPaymentStatuses.has(status);
@@ -43,9 +44,18 @@ function getStatusCopy(status) {
     };
   }
 
+  if (status === "cancelled") {
+    return {
+      title: "Phiên thanh toán đã hủy",
+      body: "Phiên checkout đã bị hủy. Bạn có thể quay lại danh sách đặt phòng để tạo phiên thanh toán mới nếu đơn vẫn còn hợp lệ.",
+      icon: XCircle,
+      className: "status-pill status-pill-cancelled",
+    };
+  }
+
   return {
-    title: "Bella đang chờ xác nhận cuối cùng",
-    body: "Trang này chỉ hiển thị trạng thái do backend xác minh. Nếu provider chưa callback xong, Bella sẽ tiếp tục làm mới trong nền.",
+    title: "Đang chờ ngân hàng xác nhận",
+    body: "Bella đang kiểm tra trạng thái thật từ backend. Webhook từ ngân hàng có thể đến chậm trong vài chục giây.",
     icon: RefreshCw,
     className: "status-pill status-pill-pending",
   };
@@ -97,7 +107,7 @@ export default function PaymentReturnPage() {
         setBooking(nextBooking);
         setError("");
 
-        if (!isTerminalStatus(nextPayment?.paymentStatus || "processing") && attempts < 6) {
+        if (!isTerminalStatus(nextPayment?.paymentStatus || "processing") && attempts < MAX_POLL_ATTEMPTS) {
           attempts += 1;
           timerId = window.setTimeout(loadStatus, 2500);
         } else {
@@ -108,7 +118,7 @@ export default function PaymentReturnPage() {
           return;
         }
 
-        if (requestError.response?.status === 409 && attempts < 6) {
+        if (requestError.response?.status === 409 && attempts < MAX_POLL_ATTEMPTS) {
           attempts += 1;
           timerId = window.setTimeout(loadStatus, 1500);
           return;
@@ -236,7 +246,7 @@ export default function PaymentReturnPage() {
           ) : null}
 
           <div className="post-booking-actions">
-            {paymentStatus === "failed" ? (
+            {["failed", "cancelled", "expired"].includes(paymentStatus) ? (
               <button
                 type="button"
                 className="button button-primary button-block"

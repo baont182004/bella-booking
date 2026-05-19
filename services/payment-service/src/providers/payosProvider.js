@@ -99,9 +99,6 @@ function buildPayosDescription(booking) {
 
 function normalizePayosStatus(value, success = false) {
   const status = String(value || "").trim().toUpperCase();
-  if (success || status === "PAID" || status === "SUCCEEDED" || status === "SUCCESS") {
-    return "succeeded";
-  }
   if (status === "CANCELLED" || status === "CANCELED") {
     return "cancelled";
   }
@@ -110,6 +107,9 @@ function normalizePayosStatus(value, success = false) {
   }
   if (status === "FAILED") {
     return "failed";
+  }
+  if (success || status === "PAID" || status === "SUCCEEDED" || status === "SUCCESS") {
+    return "succeeded";
   }
   return "processing";
 }
@@ -275,6 +275,35 @@ export async function getReusableCheckoutSession({ payment, booking }) {
   };
 }
 
+export async function getProviderPaymentStatus({ payment }) {
+  const lookupId = payment?.provider_intent_id || payment?.provider_session_id;
+  if (!lookupId) {
+    return null;
+  }
+
+  const payload = await requestPayos(`${PAYMENT_REQUESTS_PATH}/${lookupId}`);
+  const data = payload.data || {};
+  const status = normalizePayosStatus(data.status || data.code, payload.success === true && data.code === "00");
+
+  return normalizeWebhookEvent({
+    code: payload.code || data.code || "00",
+    desc: payload.desc || data.desc || "reconciliation",
+    success: status === "succeeded",
+    data: {
+      orderCode: data.orderCode || payment.provider_intent_id,
+      paymentLinkId: data.paymentLinkId || payment.provider_session_id,
+      reference: data.reference || payment.provider_payment_id,
+      amount: data.amount || payment.amount,
+      currency: data.currency || payment.currency || "VND",
+      status: data.status || data.code,
+      code: data.code,
+      desc: data.desc || payload.desc,
+      transactionDateTime: data.transactionDateTime,
+    },
+    signature: `reconcile:${payment._id?.toString?.() || lookupId}:${status}`,
+  });
+}
+
 export async function expireCheckoutSession({ payment }) {
   const lookupId = payment?.provider_intent_id || payment?.provider_session_id;
   if (!lookupId) {
@@ -373,6 +402,7 @@ export default {
   signatureHeader: SIGNATURE_FIELD,
   createCheckoutSession,
   getReusableCheckoutSession,
+  getProviderPaymentStatus,
   expireCheckoutSession,
   verifyWebhook,
   normalizeWebhookEvent,

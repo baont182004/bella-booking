@@ -54,6 +54,16 @@ function scrollToSection(sectionId) {
   document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function formatCountdown(targetDate, nowDate = new Date()) {
+  if (!targetDate) return "";
+  const remainingMs = new Date(targetDate).getTime() - nowDate.getTime();
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "00:00";
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
 export default function RoomDetailPage() {
   const { code } = useParams();
   const location = useLocation();
@@ -79,6 +89,8 @@ export default function RoomDetailPage() {
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [selectedComboSlug, setSelectedComboSlug] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
+  const [statusChecking, setStatusChecking] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   const room = useMemo(
     () => roomCatalog.find((item) => item.code === code) || null,
@@ -113,6 +125,12 @@ export default function RoomDetailPage() {
     const timeoutId = window.setTimeout(() => scrollToSection("book"), 120);
     return () => window.clearTimeout(timeoutId);
   }, [loading, location.hash]);
+
+  useEffect(() => {
+    if (!bookingResult?.paymentExpiresAt) return undefined;
+    const timerId = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timerId);
+  }, [bookingResult?.paymentExpiresAt]);
 
   const nights = useMemo(() => {
     if (!bookingData.checkInDate || !bookingData.checkOutDate) return 0;
@@ -183,6 +201,9 @@ export default function RoomDetailPage() {
     !authLoading &&
     !bookingResult &&
     (!availabilityResult || availabilityResult.available !== false);
+  const holdCountdown = bookingResult?.paymentExpiresAt
+    ? formatCountdown(bookingResult.paymentExpiresAt, now)
+    : "";
 
   const reservationSteps = [
     {
@@ -319,6 +340,35 @@ export default function RoomDetailPage() {
     } finally {
       setIsSubmitting(false);
       setSelectedPaymentMethod("");
+    }
+  };
+
+  const handleCheckPaymentStatus = async () => {
+    if (!checkoutSession?.sessionId) return;
+
+    try {
+      setStatusChecking(true);
+      const response = await paymentApi.get(`/payments/checkout-sessions/${checkoutSession.sessionId}/status`);
+      const nextBooking = response.data.booking;
+      const nextPayment = response.data.payment;
+      if (nextBooking) {
+        setBookingResult((previous) => ({
+          ...(previous || {}),
+          ...nextBooking,
+          bookingReference: nextBooking.bookingReference || previous?.bookingReference,
+          totalPrice: nextBooking.totalPrice || previous?.totalPrice,
+        }));
+      }
+
+      if (nextPayment?.paymentStatus === "succeeded") {
+        toast.success("Bella đã xác nhận thanh toán thành công.");
+      } else {
+        toast("Bella vẫn đang chờ ngân hàng xác nhận giao dịch.");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Chưa thể kiểm tra trạng thái thanh toán.");
+    } finally {
+      setStatusChecking(false);
     }
   };
 
@@ -1052,6 +1102,23 @@ export default function RoomDetailPage() {
                     <p>{formatCurrency(bookingResult.totalPrice)}</p>
                   </div>
 
+                  <div className="booking-confirmation-card">
+                    <div className="booking-confirmation-row">
+                      <span>Khách sạn / hạng phòng</span>
+                      <strong>{hotel?.name || bellaContent.property.name} · {room.displayName}</strong>
+                    </div>
+                    <div className="booking-confirmation-row">
+                      <span>Thời gian lưu trú</span>
+                      <strong>
+                        {formatDateRange(bookingData.checkInDate, bookingData.checkOutDate)} · {nights} đêm
+                      </strong>
+                    </div>
+                    <div className="booking-confirmation-row">
+                      <span>Giữ chỗ còn lại</span>
+                      <strong>{holdCountdown || "Đang cập nhật"}</strong>
+                    </div>
+                  </div>
+
                   <div className="form-stack" data-testid="payment-panel">
                     <div className="booking-note-card booking-note-card-soft">
                       <strong>Bella không lưu dữ liệu thẻ</strong>
@@ -1074,7 +1141,8 @@ export default function RoomDetailPage() {
                     {bookingResult.paymentExpiresAt ? (
                       <p className="field-note">
                         Bella đang giữ chỗ đến khoảng{" "}
-                        {new Date(bookingResult.paymentExpiresAt).toLocaleString("vi-VN")}.
+                        {new Date(bookingResult.paymentExpiresAt).toLocaleString("vi-VN")}. Thời gian còn lại:{" "}
+                        <strong>{holdCountdown}</strong>.
                       </p>
                     ) : null}
 
@@ -1129,6 +1197,7 @@ export default function RoomDetailPage() {
                     {checkoutSession?.qrCode && !checkoutSession?.checkoutUrl ? (
                       <div className="booking-note-card booking-note-card-soft">
                         <strong>Quét QR ngân hàng</strong>
+                        <p>Mở app ngân hàng và quét mã QR để thanh toán. Sau khi chuyển khoản, bấm kiểm tra trạng thái để Bella đọc kết quả từ backend.</p>
                         {String(checkoutSession.qrCode).startsWith("http") ||
                         String(checkoutSession.qrCode).startsWith("data:image") ? (
                           <img
@@ -1139,6 +1208,16 @@ export default function RoomDetailPage() {
                         ) : (
                           <code className="payment-qr-code">{checkoutSession.qrCode}</code>
                         )}
+                        {checkoutSession.sessionId ? (
+                          <button
+                            type="button"
+                            className="button button-primary button-block payment-status-check-button"
+                            onClick={handleCheckPaymentStatus}
+                            disabled={statusChecking}
+                          >
+                            {statusChecking ? "Đang kiểm tra..." : "Tôi đã thanh toán, kiểm tra trạng thái"}
+                          </button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

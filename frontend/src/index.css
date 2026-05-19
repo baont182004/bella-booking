@@ -1536,6 +1536,10 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.payment-status-check-button {
+  margin-top: 0.85rem;
+}
+
 .status-pill {
   background: rgba(16, 37, 63, 0.08);
   color: var(--ink);
