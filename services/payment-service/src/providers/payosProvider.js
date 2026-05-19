@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { getPaymentReturnPath, getPaymentRuntimeConfig } from "../config/paymentConfig.js";
 
 const PROVIDER_NAME = "payos";
@@ -118,6 +118,16 @@ function sanitizePayloadSummary(summary = {}) {
   return Object.fromEntries(
     Object.entries(summary).filter(([, value]) => value !== undefined && value !== null && value !== ""),
   );
+}
+
+function buildFallbackEventId({ data = {}, status, signature }) {
+  const signatureHash = createHash("sha256")
+    .update(String(signature || "missing_signature"))
+    .digest("hex")
+    .slice(0, 24);
+  const orderCode = data.orderCode === undefined || data.orderCode === null ? "unknown" : String(data.orderCode);
+
+  return `${PROVIDER_NAME}:${orderCode}:${status}:${signatureHash}`;
 }
 
 async function requestPayos(path, { method = "GET", body = null } = {}) {
@@ -304,10 +314,13 @@ export function normalizeWebhookEvent(event) {
   const data = event?.data || {};
   const status = normalizePayosStatus(data.status || data.code, event?.success === true && data.code === "00");
   const orderCode = data.orderCode === undefined || data.orderCode === null ? null : String(data.orderCode);
+  const providerEventId = data.reference ||
+    (data.paymentLinkId ? `${PROVIDER_NAME}:${data.paymentLinkId}:${status}` : null) ||
+    buildFallbackEventId({ data, status, signature: event?.signature });
 
   return {
     provider: PROVIDER_NAME,
-    providerEventId: data.reference || `${PROVIDER_NAME}:${data.paymentLinkId || orderCode}:${status}`,
+    providerEventId,
     eventType: `payos.payment.${status}`,
     providerSessionId: data.paymentLinkId || null,
     providerIntentId: orderCode,

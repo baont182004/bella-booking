@@ -960,7 +960,7 @@ async function beginWebhookEvent(normalizedEvent, verifiedAt) {
   return { duplicate: false, inProgress: false, eventRecord: claimedEventRecord };
 }
 
-async function findPaymentForProviderEvent(normalizedEvent) {
+export async function findPaymentReferenceForProviderEvent(normalizedEvent) {
   if (normalizedEvent.bellaPaymentId && isObjectId(normalizedEvent.bellaPaymentId)) {
     const paymentByMetadataId = await Payment.findById(normalizedEvent.bellaPaymentId);
     if (paymentByMetadataId) {
@@ -1006,6 +1006,15 @@ async function findPaymentForProviderEvent(normalizedEvent) {
     if (paymentByBooking) {
       return paymentByBooking;
     }
+  }
+
+  return null;
+}
+
+async function findPaymentForProviderEvent(normalizedEvent) {
+  const payment = await findPaymentReferenceForProviderEvent(normalizedEvent);
+  if (payment) {
+    return payment;
   }
 
   throw new Error("Payment not found for verified provider event");
