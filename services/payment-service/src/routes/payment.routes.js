@@ -64,6 +64,15 @@ function isHostedCheckoutAccessValid(payment, accessToken) {
   return payment?.metadata?.mockCheckout?.accessToken === accessToken;
 }
 
+function findPaymentByCheckoutReference(sessionId) {
+  return Payment.findOne({
+    $or: [
+      { provider_session_id: sessionId },
+      { provider_intent_id: sessionId },
+    ],
+  });
+}
+
 async function processProviderCheckoutAction({ action, payment, booking }) {
   const provider = getPaymentProvider(payment.provider);
   if (typeof provider.createHostedCheckoutEvent !== "function") {
@@ -395,7 +404,7 @@ router.get("/checkout-sessions/:sessionId/status", authenticate, async (req, res
   let paymentLock = null;
 
   try {
-    const payment = await Payment.findOne({ provider_session_id: req.params.sessionId });
+    const payment = await findPaymentByCheckoutReference(req.params.sessionId);
     if (!payment) {
       return res.status(404).json({ error: "Payment session not found" });
     }
@@ -433,7 +442,7 @@ router.post("/checkout-sessions/:sessionId/cancel", authenticate, paymentRateLim
   let paymentLock = null;
 
   try {
-    const payment = await Payment.findOne({ provider_session_id: req.params.sessionId });
+    const payment = await findPaymentByCheckoutReference(req.params.sessionId);
     if (!payment) {
       return res.status(404).json({ error: "Payment session not found" });
     }

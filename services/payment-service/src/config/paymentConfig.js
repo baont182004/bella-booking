@@ -7,6 +7,7 @@ import {
 const DEFAULT_PAYMENT_PROVIDER = "mock";
 const DEFAULT_PAYMENT_PUBLIC_BASE_URL = "http://localhost:3004";
 const DEFAULT_FRONTEND_PUBLIC_URL = "http://localhost:5173";
+const DEFAULT_PAYOS_API_BASE_URL = "https://api-merchant.payos.vn";
 const DEFAULT_CHECKOUT_TTL_MINUTES = 30;
 const DEFAULT_WEBHOOK_TOLERANCE_SECONDS = 300;
 const PAYMENT_RETURN_PATH = "/payments/return";
@@ -77,6 +78,12 @@ function assertStripeApiVersionShape(value) {
   }
 }
 
+function assertRequiredProviderValue(name, value, providerName, validationMessages) {
+  if (!value) {
+    validationMessages.push(`${name} is required when PAYMENT_PROVIDER=${providerName}`);
+  }
+}
+
 function buildConfigError(messages = []) {
   const error = new Error(`Payment configuration error:\n- ${messages.join("\n- ")}`);
   error.name = "PaymentConfigurationError";
@@ -140,6 +147,17 @@ export function getPaymentRuntimeConfig() {
   const stripeSecretKey = trimEnv(process.env.STRIPE_SECRET_KEY);
   const stripeWebhookSecret = trimEnv(process.env.STRIPE_WEBHOOK_SECRET);
   const stripeApiVersion = trimEnv(process.env.STRIPE_API_VERSION);
+  const payosClientId = trimEnv(process.env.PAYOS_CLIENT_ID);
+  const payosApiKey = trimEnv(process.env.PAYOS_API_KEY);
+  const payosChecksumKey = trimEnv(process.env.PAYOS_CHECKSUM_KEY);
+  const payosApiBaseUrl = trimEnv(process.env.PAYOS_API_BASE_URL) || DEFAULT_PAYOS_API_BASE_URL;
+  const defaultPayosReturnUrl = `${frontendPublicUrl || DEFAULT_FRONTEND_PUBLIC_URL}${PAYMENT_RETURN_PATH}`;
+  const defaultPayosCancelUrl = `${frontendPublicUrl || DEFAULT_FRONTEND_PUBLIC_URL}${PAYMENT_RETURN_PATH}`;
+  const defaultPayosWebhookUrl = `${paymentPublicBaseUrl || DEFAULT_PAYMENT_PUBLIC_BASE_URL}${getPaymentWebhookPath("payos")}`;
+  let payosReturnUrl = normalizeBaseUrl("PAYOS_RETURN_URL", defaultPayosReturnUrl, defaultPayosReturnUrl);
+  let payosCancelUrl = normalizeBaseUrl("PAYOS_CANCEL_URL", defaultPayosCancelUrl, defaultPayosCancelUrl);
+  let payosWebhookUrl = normalizeBaseUrl("PAYOS_WEBHOOK_URL", defaultPayosWebhookUrl, defaultPayosWebhookUrl);
+  let normalizedPayosApiBaseUrl = DEFAULT_PAYOS_API_BASE_URL;
 
   if (provider === "stripe") {
     if (!stripeSecretKey) {
@@ -174,6 +192,41 @@ export function getPaymentRuntimeConfig() {
     }
   }
 
+  try {
+    payosReturnUrl = normalizeBaseUrl(
+      "PAYOS_RETURN_URL",
+      process.env.PAYOS_RETURN_URL,
+      `${frontendPublicUrl || DEFAULT_FRONTEND_PUBLIC_URL}${PAYMENT_RETURN_PATH}`,
+    );
+    payosCancelUrl = normalizeBaseUrl(
+      "PAYOS_CANCEL_URL",
+      process.env.PAYOS_CANCEL_URL,
+      `${frontendPublicUrl || DEFAULT_FRONTEND_PUBLIC_URL}${PAYMENT_RETURN_PATH}`,
+    );
+    payosWebhookUrl = normalizeBaseUrl(
+      "PAYOS_WEBHOOK_URL",
+      process.env.PAYOS_WEBHOOK_URL,
+      defaultPayosWebhookUrl,
+    );
+    normalizedPayosApiBaseUrl = normalizeBaseUrl("PAYOS_API_BASE_URL", payosApiBaseUrl, DEFAULT_PAYOS_API_BASE_URL);
+  } catch (error) {
+    if (provider === "payos") {
+      validationMessages.push(error.message);
+    }
+  }
+
+  if (provider === "payos") {
+    assertRequiredProviderValue("PAYOS_CLIENT_ID", payosClientId, "payos", validationMessages);
+    assertRequiredProviderValue("PAYOS_API_KEY", payosApiKey, "payos", validationMessages);
+    assertRequiredProviderValue("PAYOS_CHECKSUM_KEY", payosChecksumKey, "payos", validationMessages);
+
+    if (!isImplementedPaymentProvider("payos")) {
+      validationMessages.push(
+        "PAYMENT_PROVIDER=payos is configured, but the payOS provider adapter is not available.",
+      );
+    }
+  }
+
   if (validationMessages.length > 0) {
     throw buildConfigError(validationMessages);
   }
@@ -200,6 +253,15 @@ export function getPaymentRuntimeConfig() {
       secretKey: stripeSecretKey || null,
       webhookSecret: stripeWebhookSecret || null,
       apiVersion: stripeApiVersion || null,
+    },
+    payos: {
+      clientId: payosClientId || null,
+      apiKey: payosApiKey || null,
+      checksumKey: payosChecksumKey || null,
+      apiBaseUrl: normalizedPayosApiBaseUrl,
+      returnUrl: payosReturnUrl,
+      cancelUrl: payosCancelUrl,
+      webhookUrl: payosWebhookUrl,
     },
   };
 

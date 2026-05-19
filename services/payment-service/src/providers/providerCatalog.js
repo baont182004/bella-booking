@@ -1,5 +1,5 @@
-export const declaredPaymentProviders = ["mock", "stripe"];
-export const implementedPaymentProviders = ["mock", "stripe"];
+export const declaredPaymentProviders = ["mock", "stripe", "payos"];
+export const implementedPaymentProviders = ["mock", "stripe", "payos"];
 
 export function listDeclaredPaymentProviders() {
   return [...declaredPaymentProviders];

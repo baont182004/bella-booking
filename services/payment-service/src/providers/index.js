@@ -1,4 +1,5 @@
 import mockProvider from "./mockProvider.js";
+import payosProvider from "./payosProvider.js";
 import stripeProvider from "./stripeProvider.js";
 import {
   isDeclaredPaymentProvider,
@@ -9,6 +10,7 @@ import {
 const providers = new Map([
   [mockProvider.name, mockProvider],
   [stripeProvider.name, stripeProvider],
+  [payosProvider.name, payosProvider],
 ]);
 
 export function getPaymentProvider(name = process.env.PAYMENT_PROVIDER || mockProvider.name) {

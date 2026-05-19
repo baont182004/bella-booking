@@ -304,8 +304,13 @@ export default function RoomDetailPage() {
         billingName: bookingData.guestFullName || undefined,
         billingEmail: bookingData.guestEmail || undefined,
       });
-      setCheckoutSession(response.data.checkoutSession);
-      window.location.assign(response.data.checkoutSession.checkoutUrl);
+      const nextCheckoutSession = response.data.checkoutSession;
+      setCheckoutSession(nextCheckoutSession);
+      if (nextCheckoutSession.checkoutUrl) {
+        window.location.assign(nextCheckoutSession.checkoutUrl);
+      } else if (nextCheckoutSession.qrCode) {
+        toast.success("Bella đã tạo mã QR ngân hàng. Hãy quét mã để thanh toán.");
+      }
     } catch (error) {
       const nextCheckoutError =
         error.response?.data?.error || "Không thể khởi tạo cổng thanh toán.";
@@ -1103,8 +1108,8 @@ export default function RoomDetailPage() {
                     >
                       <Landmark size={16} />
                       {selectedPaymentMethod === "bank_transfer"
-                        ? "Đang tạo phiên chuyển khoản..."
-                        : "Thanh toán ngân hàng sandbox"}
+                        ? "Đang tạo phiên quét QR..."
+                        : "Quét QR ngân hàng"}
                     </button>
 
                     {checkoutSession?.checkoutUrl ? (
@@ -1120,6 +1125,22 @@ export default function RoomDetailPage() {
                         Tra cứu bằng mã đặt phòng
                       </Link>
                     )}
+
+                    {checkoutSession?.qrCode && !checkoutSession?.checkoutUrl ? (
+                      <div className="booking-note-card booking-note-card-soft">
+                        <strong>Quét QR ngân hàng</strong>
+                        {String(checkoutSession.qrCode).startsWith("http") ||
+                        String(checkoutSession.qrCode).startsWith("data:image") ? (
+                          <img
+                            src={checkoutSession.qrCode}
+                            alt="Mã QR thanh toán ngân hàng Bella"
+                            className="payment-qr-image"
+                          />
+                        ) : (
+                          <code className="payment-qr-code">{checkoutSession.qrCode}</code>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

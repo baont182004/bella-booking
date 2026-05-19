@@ -6,6 +6,7 @@
 
 - `mock`: local/demo hosted checkout. Supports sandbox card and sandbox bank transfer.
 - `stripe`: scaffolded hosted Checkout adapter. Requires real Stripe sandbox/live credentials.
+- `payos`: hosted payOS payment link for Vietnamese bank QR checkout. Requires payOS sandbox/live credentials.
 
 Keep `PAYMENT_PROVIDER=mock` for project demos unless real gateway credentials are configured.
 
@@ -22,6 +23,41 @@ The frontend return path is `/payments/return`. Provider webhooks are under:
 
 - `POST /payments/webhooks/mock`
 - `POST /payments/webhooks/stripe`
+- `POST /payments/webhooks/payos`
+
+## payOS QR Checkout
+
+Set these variables when `PAYMENT_PROVIDER=payos`:
+
+```env
+PAYOS_CLIENT_ID=your_payos_client_id
+PAYOS_API_KEY=your_payos_api_key
+PAYOS_CHECKSUM_KEY=your_payos_checksum_key
+PAYOS_RETURN_URL=https://bella-booking.vercel.app/payments/return
+PAYOS_CANCEL_URL=https://bella-booking.vercel.app/payments/return
+PAYOS_WEBHOOK_URL=https://bella-booking-api.duckdns.org/payments/webhooks/payos
+PAYOS_API_BASE_URL=https://api-merchant.payos.vn
+```
+
+When the frontend sends `paymentMethodType=bank_transfer` and the active provider is `payos`, payment-service creates a payOS payment link. Bella still computes the amount from the booking in MongoDB; the frontend never sends or controls the payable amount.
+
+payOS identifiers are mapped as follows:
+
+- `Payment.provider_session_id`: `paymentLinkId` when payOS returns it, otherwise the numeric `orderCode`.
+- `Payment.provider_intent_id`: numeric `orderCode`.
+- `Payment.provider_payment_id`: payOS `reference` after a successful provider event.
+
+The payOS return/cancel URL is only a UX redirect back to `/payments/return`. Booking confirmation only happens after `POST /payments/webhooks/payos` verifies the webhook checksum and processes the provider event.
+
+Webhook verification uses the payOS `signature` value over the webhook `data` object with `PAYOS_CHECKSUM_KEY`. Duplicate webhook deliveries are deduplicated by provider event id before mutating payment or booking state.
+
+To test QR checkout:
+
+1. Configure a payOS sandbox account and set `PAYMENT_PROVIDER=payos`.
+2. Register `PAYOS_WEBHOOK_URL` in payOS, or expose local payment-service with a tunnel for sandbox callbacks.
+3. Create a booking, then create checkout with `paymentMethodType=bank_transfer`.
+4. Open `checkoutSession.checkoutUrl` and complete or cancel the payOS flow.
+5. Reload `/payments/return?booking_id=...&session_id=...`; the page reads backend state rather than trusting redirect query params.
 
 ## Mock Security
 
