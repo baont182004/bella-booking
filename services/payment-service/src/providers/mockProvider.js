@@ -19,6 +19,11 @@ const actionConfigurations = {
     cardLast4: "4444",
     paymentMethodType: "card",
   },
+  complete_bank_transfer: {
+    eventType: "checkout.session.completed",
+    status: "succeeded",
+    paymentMethodType: "bank_transfer",
+  },
   fail_declined: {
     eventType: "payment_intent.payment_failed",
     status: "failed",
@@ -26,12 +31,24 @@ const actionConfigurations = {
     failureMessage: "Sandbox card was declined by the mock provider.",
     paymentMethodType: "card",
   },
+  fail_bank_transfer: {
+    eventType: "payment_intent.payment_failed",
+    status: "failed",
+    failureCode: "bank_transfer_rejected",
+    failureMessage: "Sandbox bank transfer was rejected by the mock provider.",
+    paymentMethodType: "bank_transfer",
+  },
   expire_session: {
     eventType: "checkout.session.expired",
     status: "expired",
     paymentMethodType: "hosted_checkout",
   },
-}
+  cancel_session: {
+    eventType: "checkout.session.cancelled",
+    status: "cancelled",
+    paymentMethodType: "hosted_checkout",
+  },
+};
 
 function getWebhookSecret() {
   return getPaymentRuntimeConfig().mock.webhookSecret;
@@ -115,6 +132,7 @@ export function createCheckoutSession({
   payment,
   billingName,
   billingEmail,
+  paymentMethodType = "hosted_checkout",
 }) {
   const providerSessionId = `mock_sess_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
   const providerIntentId = `mock_int_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -140,9 +158,13 @@ export function createCheckoutSession({
     providerPayloadSummary: {
       mode: "hosted_checkout",
       sandbox: true,
+      requestedPaymentMethodType: paymentMethodType,
       expiresAt: expiresAt.toISOString(),
       billingEmail: billingEmail || payment.billing_email || booking.guest_email || null,
       billingName: billingName || payment.billing_name || booking.guest_full_name || null,
+    },
+    internalMetadata: {
+      requestedPaymentMethodType: paymentMethodType,
     },
   };
 }
@@ -226,6 +248,8 @@ export function normalizeWebhookEvent(event) {
     status = "refunded";
   } else if (eventType === "checkout.session.expired") {
     status = "expired";
+  } else if (eventType === "checkout.session.cancelled") {
+    status = "cancelled";
   }
 
   return {
@@ -288,6 +312,10 @@ export function getHostedCheckoutViewModel({ payment, booking }) {
     provider: DEFAULT_PROVIDER,
     paymentAmount: payment.amount,
     currency: payment.currency || "VND",
+    requestedPaymentMethodType:
+      payment.metadata?.requestedPaymentMethodType ||
+      payment.payment_method_type ||
+      "hosted_checkout",
     bookingReference: booking.booking_reference || booking._id.toString(),
     guestName: payment.billing_name || booking.guest_full_name || "Bella guest",
     returnUrl: buildFrontendReturnUrl({

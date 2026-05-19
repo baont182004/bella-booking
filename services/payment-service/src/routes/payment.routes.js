@@ -13,6 +13,7 @@ import {
   isPaymentSuccessful,
   loadBellaBookingById,
   loadOwnedBellaBooking,
+  markBookingHoldExpiredIfNeeded,
   markPaymentExpiredIfNeeded,
   processVerifiedProviderEvent,
   recordAuditLog,
@@ -35,6 +36,7 @@ const paymentRateLimit = createRateLimiter({
 const checkoutSessionSchema = Joi.object({
   bookingId: Joi.string().required(),
   provider: Joi.string().valid(...listImplementedPaymentProviders()).optional(),
+  paymentMethodType: Joi.string().valid("hosted_checkout", "card", "bank_transfer").default("hosted_checkout"),
   billingName: Joi.string().trim().min(2).max(120).optional(),
   billingEmail: Joi.string().trim().lowercase().email().optional(),
 }).unknown(false);
@@ -45,7 +47,15 @@ const refundSchema = Joi.object({
 
 const hostedCheckoutActionSchema = Joi.object({
   action: Joi.string()
-    .valid("complete_visa", "complete_mastercard", "fail_declined", "expire_session")
+    .valid(
+      "complete_visa",
+      "complete_mastercard",
+      "complete_bank_transfer",
+      "fail_declined",
+      "fail_bank_transfer",
+      "expire_session",
+      "cancel_session",
+    )
     .required(),
   access_token: Joi.string().required(),
 }).unknown(false);
@@ -54,7 +64,43 @@ function isHostedCheckoutAccessValid(payment, accessToken) {
   return payment?.metadata?.mockCheckout?.accessToken === accessToken;
 }
 
+async function processProviderCheckoutAction({ action, payment, booking }) {
+  const provider = getPaymentProvider(payment.provider);
+  if (typeof provider.createHostedCheckoutEvent !== "function") {
+    const error = new Error("This payment provider does not support sandbox checkout actions");
+    error.status = 400;
+    throw error;
+  }
+
+  const event = provider.createHostedCheckoutEvent({
+    action,
+    payment,
+    booking,
+  });
+  const rawBody = JSON.stringify(event);
+  const verifiedEvent =
+    typeof provider.buildSignatureHeader === "function"
+      ? provider.verifyWebhook({
+          rawBody,
+          signatureHeader: provider.buildSignatureHeader(rawBody),
+        })
+      : event;
+  const normalizedEvent = await provider.normalizeWebhookEvent(verifiedEvent);
+
+  return processVerifiedProviderEvent({
+    normalizedEvent,
+    verifiedAt: new Date(),
+  });
+}
+
 function buildHostedCheckoutHtml({ viewModel, sessionId, accessToken }) {
+  const requestedMethodLabel =
+    viewModel.requestedPaymentMethodType === "bank_transfer"
+      ? "Chuyển khoản ngân hàng sandbox"
+      : viewModel.requestedPaymentMethodType === "card"
+        ? "Thẻ sandbox"
+        : "Hosted checkout sandbox";
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -203,6 +249,10 @@ function buildHostedCheckoutHtml({ viewModel, sessionId, accessToken }) {
             <strong>${Number(viewModel.paymentAmount || 0).toLocaleString("vi-VN")} ${viewModel.currency}</strong>
           </div>
           <div class="summary-card">
+            <span>Requested method</span>
+            <strong>${requestedMethodLabel}</strong>
+          </div>
+          <div class="summary-card">
             <span>Guest</span>
             <strong>${viewModel.guestName}</strong>
           </div>
@@ -224,13 +274,28 @@ function buildHostedCheckoutHtml({ viewModel, sessionId, accessToken }) {
           </form>
           <form method="post" action="/payments/hosted/mock/${sessionId}/actions">
             <input type="hidden" name="access_token" value="${accessToken}" />
+            <input type="hidden" name="action" value="complete_bank_transfer" />
+            <button type="submit" class="secondary" data-testid="mock-checkout-success-bank">Complete bank transfer sandbox<span>Success path for bank checkout / manual transfer simulation.</span></button>
+          </form>
+          <form method="post" action="/payments/hosted/mock/${sessionId}/actions">
+            <input type="hidden" name="access_token" value="${accessToken}" />
             <input type="hidden" name="action" value="fail_declined" />
             <button type="submit" class="danger" data-testid="mock-checkout-fail">Simulate decline<span>Provider rejects the payment. Booking stays unconfirmed until a later verified success.</span></button>
           </form>
           <form method="post" action="/payments/hosted/mock/${sessionId}/actions">
             <input type="hidden" name="access_token" value="${accessToken}" />
+            <input type="hidden" name="action" value="fail_bank_transfer" />
+            <button type="submit" class="danger" data-testid="mock-checkout-fail-bank">Reject bank transfer sandbox<span>Simulates a bank checkout rejection for demo and testing.</span></button>
+          </form>
+          <form method="post" action="/payments/hosted/mock/${sessionId}/actions">
+            <input type="hidden" name="access_token" value="${accessToken}" />
             <input type="hidden" name="action" value="expire_session" />
             <button type="submit" class="neutral" data-testid="mock-checkout-expire">Expire checkout session<span>Marks the hosted session as expired and returns control to Bella.</span></button>
+          </form>
+          <form method="post" action="/payments/hosted/mock/${sessionId}/actions">
+            <input type="hidden" name="access_token" value="${accessToken}" />
+            <input type="hidden" name="action" value="cancel_session" />
+            <button type="submit" class="neutral" data-testid="mock-checkout-cancel">Cancel checkout session<span>Simulates a user cancellation at the provider checkout page.</span></button>
           </form>
         </div>
         <p class="footnote">Authoritative booking confirmation only happens after Bella processes a verified provider event server-side. Returning to <code>${viewModel.returnUrl}</code> is UX only.</p>
@@ -268,6 +333,14 @@ async function createCheckoutSessionHandler(req, res) {
       return;
     }
 
+    const holdExpiryResult = await markBookingHoldExpiredIfNeeded(booking, req.user);
+    if (holdExpiryResult.expired) {
+      return res.status(409).json({
+        error: "This booking hold has expired. Please create a new Bella reservation.",
+        booking: serializeBookingSummary(holdExpiryResult.booking),
+      });
+    }
+
     if (
       booking.status === "cancelled" ||
       booking.status === "completed" ||
@@ -294,6 +367,7 @@ async function createCheckoutSessionHandler(req, res) {
       providerName,
       billingName: value.billingName,
       billingEmail: value.billingEmail,
+      paymentMethodType: value.paymentMethodType,
     });
 
     res.status(checkoutSession.reused ? 200 : 201).json({
@@ -350,6 +424,68 @@ router.get("/checkout-sessions/:sessionId/status", authenticate, async (req, res
   } catch (error) {
     console.error("Get checkout session status error:", error);
     res.status(500).json({ error: "Failed to fetch checkout status" });
+  } finally {
+    await releasePaymentLock(paymentLock);
+  }
+});
+
+router.post("/checkout-sessions/:sessionId/cancel", authenticate, paymentRateLimit, async (req, res) => {
+  let paymentLock = null;
+
+  try {
+    const payment = await Payment.findOne({ provider_session_id: req.params.sessionId });
+    if (!payment) {
+      return res.status(404).json({ error: "Payment session not found" });
+    }
+
+    paymentLock = await acquirePaymentLock(payment.booking_id.toString());
+    if (!paymentLock) {
+      return res.status(409).json({ error: "Payment status is already being refreshed" });
+    }
+
+    const lockedPayment = await Payment.findById(payment._id);
+    if (!lockedPayment) {
+      return res.status(404).json({ error: "Payment session not found" });
+    }
+
+    const booking = await loadOwnedBellaBooking(req, res, lockedPayment.booking_id.toString());
+    if (!booking) {
+      return;
+    }
+
+    await markPaymentExpiredIfNeeded(lockedPayment, booking, req.user);
+    const currentStatus = getPaymentStatus(lockedPayment);
+    if (isPaymentSuccessful(currentStatus)) {
+      return res.status(409).json({ error: "Paid sessions cannot be cancelled" });
+    }
+    if (["cancelled", "expired", "failed", "refunded", "partially_refunded"].includes(currentStatus)) {
+      return res.json({
+        message: "Payment session is already closed",
+        payment: serializePayment(lockedPayment),
+        booking: serializeBookingSummary(booking),
+      });
+    }
+
+    await releasePaymentLock(paymentLock);
+    paymentLock = null;
+
+    const result = await processProviderCheckoutAction({
+      action: "cancel_session",
+      payment: lockedPayment,
+      booking,
+    });
+
+    res.json({
+      message: "Payment session cancelled successfully",
+      payment: serializePayment(result.payment || lockedPayment),
+      booking: serializeBookingSummary(result.booking || booking),
+    });
+  } catch (error) {
+    console.error("Cancel checkout session error:", error);
+    const status = Number.isInteger(error.status) ? error.status : 500;
+    res.status(status).json({
+      error: status === 500 ? "Failed to cancel checkout session" : error.message,
+    });
   } finally {
     await releasePaymentLock(paymentLock);
   }
@@ -442,25 +578,16 @@ router.post("/hosted/mock/:sessionId/actions", async (req, res) => {
       return res.status(404).send("Booking not found");
     }
 
-    const provider = getPaymentProvider("mock");
-    const event = provider.createHostedCheckoutEvent({
+    await releasePaymentLock(paymentLock);
+    paymentLock = null;
+
+    await processProviderCheckoutAction({
       action: value.action,
       payment: lockedPayment,
       booking,
     });
-    const rawBody = JSON.stringify(event);
-    const verifiedEvent = provider.verifyWebhook({
-      rawBody,
-      signatureHeader: provider.buildSignatureHeader(rawBody),
-    });
-    const normalizedEvent = await provider.normalizeWebhookEvent(verifiedEvent);
 
-    await processVerifiedProviderEvent({
-      normalizedEvent,
-      verifiedAt: new Date(),
-    });
-
-    res.redirect(provider.buildReturnUrlForPayment(lockedPayment));
+    res.redirect(getPaymentProvider("mock").buildReturnUrlForPayment(lockedPayment));
   } catch (error) {
     console.error("Hosted checkout action error:", error);
     const status = Number.isInteger(error.status) ? error.status : 500;

@@ -623,12 +623,67 @@ export async function markPaymentExpiredIfNeeded(payment, booking, actor = null)
   return { expired: true, payment, booking };
 }
 
+export async function markBookingHoldExpiredIfNeeded(booking, actor = null) {
+  if (
+    booking.status !== "pending_payment" ||
+    !booking.payment_expires_at ||
+    booking.payment_expires_at > new Date()
+  ) {
+    return { expired: false, booking };
+  }
+
+  const previousBookingStatus = booking.status;
+  const timestamp = new Date();
+  const payment = await Payment.findOne({ booking_id: booking._id });
+  const previousPaymentStatus = getPaymentStatus(payment);
+  booking.status = "expired";
+  touchBookingStatusTimestamps(booking, "expired", timestamp);
+
+  await withOptionalTransaction(async (session) => {
+    await booking.save(session ? { session } : undefined);
+    if (payment && isPaymentOpen(previousPaymentStatus)) {
+      setPaymentStatus(payment, "expired");
+      payment.status_reason = "booking_hold_expired";
+      syncLegacyPaymentFields(payment);
+      await payment.save(session ? { session } : undefined);
+    }
+    await queueOutboxEvents(
+      [
+        {
+          topic: "booking-status-updated",
+          eventKey: `${booking._id.toString()}:expired:${timestamp.getTime()}`,
+          aggregateType: "booking",
+          aggregateId: booking._id.toString(),
+          payload: buildBookingStatusPayload(booking),
+        },
+      ],
+      { session, flush: false },
+    );
+  });
+  triggerOutboxFlush();
+
+  await recordAuditLog({
+    action: "booking.hold_expired",
+    actor,
+    entityType: "booking",
+    entityId: booking._id.toString(),
+    metadata: {
+      bookingReference: booking.booking_reference || null,
+      previousBookingStatus,
+      previousPaymentStatus,
+    },
+  });
+
+  return { expired: true, booking };
+}
+
 export async function createHostedCheckoutSession({
   booking,
   actor,
   providerName,
   billingName,
   billingEmail,
+  paymentMethodType = "hosted_checkout",
 }) {
   const provider = getPaymentProvider(providerName);
   let payment = await Payment.findOne({ booking_id: booking._id });
@@ -640,7 +695,7 @@ export async function createHostedCheckoutSession({
       currency: booking.price_snapshot?.currency || "VND",
       provider: provider.name,
       payment_method: "hosted_checkout",
-      payment_method_type: "hosted_checkout",
+      payment_method_type: paymentMethodType,
       status: "pending",
       payment_status: "pending",
     });
@@ -658,9 +713,13 @@ export async function createHostedCheckoutSession({
   }
 
   const existingAccessToken = payment.metadata?.mockCheckout?.accessToken;
+  const requestedPaymentMethodType = paymentMethodType || "hosted_checkout";
+  const existingPaymentMethodType = payment.payment_method_type || "hosted_checkout";
   if (
     currentStatus === "pending" &&
     payment.provider === provider.name &&
+    (requestedPaymentMethodType === "hosted_checkout" ||
+      existingPaymentMethodType === requestedPaymentMethodType) &&
     payment.provider_session_id &&
     payment.checkout_session_expires_at &&
     payment.checkout_session_expires_at > new Date()
@@ -679,6 +738,7 @@ export async function createHostedCheckoutSession({
           sessionId: payment.provider_session_id,
           checkoutUrl: checkoutUrl.toString(),
           expiresAt: payment.checkout_session_expires_at,
+          paymentMethodType: payment.payment_method_type || "hosted_checkout",
           reused: true,
         },
       };
@@ -699,6 +759,7 @@ export async function createHostedCheckoutSession({
             checkoutUrl: reusableCheckoutSession.checkoutUrl,
             expiresAt: reusableCheckoutSession.expiresAt || payment.checkout_session_expires_at,
             returnUrl: reusableCheckoutSession.returnUrl || provider.buildReturnUrlForPayment(payment),
+            paymentMethodType: payment.payment_method_type || "hosted_checkout",
             reused: true,
           },
         };
@@ -723,6 +784,7 @@ export async function createHostedCheckoutSession({
     payment,
     billingName,
     billingEmail,
+    paymentMethodType,
     idempotencyKey: nextIdempotencyKey,
   });
 
@@ -734,6 +796,8 @@ export async function createHostedCheckoutSession({
   payment.idempotency_key = nextIdempotencyKey;
   payment.amount = booking.total_price;
   payment.currency = booking.price_snapshot?.currency || "VND";
+  payment.payment_method_type = checkoutSession.paymentMethodType || paymentMethodType;
+  payment.payment_method = payment.payment_method_type;
   payment.billing_name = billingName || payment.billing_name || booking.guest_full_name || null;
   payment.billing_email = billingEmail || payment.billing_email || booking.guest_email || null;
   payment.checkout_session_expires_at = checkoutSession.expiresAt;
@@ -791,6 +855,7 @@ export async function createHostedCheckoutSession({
       bookingReference: booking.booking_reference || null,
       provider: payment.provider,
       providerSessionId: payment.provider_session_id,
+      paymentMethodType: payment.payment_method_type,
       amount: payment.amount,
       currency: payment.currency,
       reused: false,
@@ -805,6 +870,7 @@ export async function createHostedCheckoutSession({
       checkoutUrl: checkoutSession.checkoutUrl,
       expiresAt: checkoutSession.expiresAt,
       returnUrl: checkoutSession.returnUrl,
+      paymentMethodType: payment.payment_method_type,
       reused: false,
     },
   };

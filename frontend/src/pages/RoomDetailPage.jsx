@@ -5,9 +5,11 @@ import {
   BedDouble,
   Calendar,
   CheckCircle2,
+  CreditCard,
   Gift,
   DoorOpen,
   Droplets,
+  Landmark,
   MapPin,
   ShieldCheck,
   Sparkles,
@@ -76,6 +78,7 @@ export default function RoomDetailPage() {
   const [availabilityResult, setAvailabilityResult] = useState(null);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [selectedComboSlug, setSelectedComboSlug] = useState("");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
 
   const room = useMemo(
     () => roomCatalog.find((item) => item.code === code) || null,
@@ -288,14 +291,16 @@ export default function RoomDetailPage() {
     }
   };
 
-  const handleStartCheckout = async () => {
+  const handleStartCheckout = async (paymentMethodType = "hosted_checkout") => {
     if (!bookingResult?.id) return;
 
     try {
       setIsSubmitting(true);
+      setSelectedPaymentMethod(paymentMethodType);
       setCheckoutError("");
       const response = await paymentApi.post("/payments/checkout-sessions", {
         bookingId: bookingResult.id,
+        paymentMethodType,
         billingName: bookingData.guestFullName || undefined,
         billingEmail: bookingData.guestEmail || undefined,
       });
@@ -308,6 +313,7 @@ export default function RoomDetailPage() {
       toast.error(nextCheckoutError);
     } finally {
       setIsSubmitting(false);
+      setSelectedPaymentMethod("");
     }
   };
 
@@ -1054,9 +1060,9 @@ export default function RoomDetailPage() {
                     <div className="booking-note-card booking-note-card-soft">
                       <strong>Kịch bản sandbox</strong>
                       <p>
-                        Tại trang checkout mô phỏng, bạn có thể chọn Visa thành công, Mastercard
-                        thành công, giao dịch bị từ chối hoặc phiên checkout hết hạn để kiểm tra
-                        luồng nghiệp vụ.
+                        Bạn có thể bắt đầu bằng thanh toán thẻ hoặc chuyển khoản ngân hàng sandbox.
+                        Trang provider mô phỏng vẫn cho phép thử thành công, thất bại, hủy hoặc
+                        hết hạn phiên để kiểm tra luồng nghiệp vụ.
                       </p>
                     </div>
 
@@ -1076,13 +1082,29 @@ export default function RoomDetailPage() {
                     <button
                       type="button"
                       className="button button-primary button-block"
-                      onClick={handleStartCheckout}
+                      onClick={() => handleStartCheckout("card")}
                       disabled={isSubmitting || bookingResult.status === "confirmed"}
-                      data-testid="start-hosted-checkout"
+                      data-testid="start-card-checkout"
                     >
+                      <CreditCard size={16} />
                       {bookingResult.status === "confirmed"
                         ? "Đặt phòng đã được xác nhận"
-                        : `Đi tới hosted checkout ${formatCurrency(bookingResult.totalPrice)}`}
+                        : selectedPaymentMethod === "card"
+                          ? "Đang tạo phiên thanh toán thẻ..."
+                          : `Thanh toán thẻ ${formatCurrency(bookingResult.totalPrice)}`}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="button button-secondary button-block"
+                      onClick={() => handleStartCheckout("bank_transfer")}
+                      disabled={isSubmitting || bookingResult.status === "confirmed"}
+                      data-testid="start-bank-checkout"
+                    >
+                      <Landmark size={16} />
+                      {selectedPaymentMethod === "bank_transfer"
+                        ? "Đang tạo phiên chuyển khoản..."
+                        : "Thanh toán ngân hàng sandbox"}
                     </button>
 
                     {checkoutSession?.checkoutUrl ? (

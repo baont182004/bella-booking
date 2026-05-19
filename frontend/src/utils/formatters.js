@@ -85,11 +85,13 @@ const paymentStatusLabels = {
   refunded: "Đã hoàn tiền",
   partially_refunded: "Hoàn tiền một phần",
   expired: "Phiên hết hạn",
+  cancelled: "Đã hủy",
 };
 
 const paymentMethodLabels = {
   card: "Thẻ đã token hóa",
   hosted_checkout: "Hosted checkout",
+  bank_transfer: "Chuyển khoản ngân hàng",
   credit_card: "Thẻ tín dụng",
   debit_card: "Thẻ ghi nợ",
 };

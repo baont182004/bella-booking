@@ -27,6 +27,8 @@ const BELLA_HOTEL_NAME = "BELLA HOTEL Phu Quoc";
 const BELLA_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const ROOM_LOCK_TTL_SECONDS = 15;
 const ACTIVE_BOOKING_STATUSES = ["pending_payment", "confirmed"];
+const OPEN_PAYMENT_STATUSES = ["pending", "processing"];
+const CONFIRMED_PAYMENT_STATUSES = ["authorized", "succeeded"];
 const BOOKING_STATUS_TRANSITIONS = {
   pending_payment: ["confirmed", "payment_failed", "cancelled", "expired"],
   payment_failed: ["pending_payment", "cancelled", "expired"],
@@ -763,6 +765,83 @@ async function adjustPromotionUsage(booking, delta, session = null) {
   await promotion.save(session ? { session } : undefined);
 }
 
+async function expireStalePendingHolds(roomId, stay) {
+  const now = new Date();
+  const staleBookings = await Booking.find({
+    room_id: roomId,
+    status: "pending_payment",
+    payment_expires_at: { $lte: now },
+    check_in_date: { $lt: stay.checkOut },
+    check_out_date: { $gt: stay.checkIn },
+  });
+
+  for (const booking of staleBookings) {
+    const payment = await Payment.findOne({ booking_id: booking._id });
+    const paymentStatus = getPaymentStatus(payment);
+    if (CONFIRMED_PAYMENT_STATUSES.includes(paymentStatus)) {
+      continue;
+    }
+
+    const previousStatus = booking.status;
+    booking.status = "expired";
+    booking.expired_at = booking.expired_at || now;
+
+    const events = [
+      buildOutboxEvent({
+        topic: "booking-status-updated",
+        eventKey: `${booking._id.toString()}:booking-expired:${now.getTime()}`,
+        aggregateType: "booking",
+        aggregateId: booking._id.toString(),
+        payload: {
+          id: booking._id.toString(),
+          bookingReference: booking.booking_reference,
+          userId: booking.user_id,
+          roomId: booking.room_id.toString(),
+          status: booking.status,
+          paymentExpiresAt: booking.payment_expires_at || null,
+          timestamp: now.toISOString(),
+        },
+      }),
+    ];
+
+    await withOptionalTransaction(async (session) => {
+      await booking.save(session ? { session } : undefined);
+
+      if (payment && OPEN_PAYMENT_STATUSES.includes(paymentStatus)) {
+        payment.status = "expired";
+        payment.payment_status = "expired";
+        payment.status_reason = "booking_hold_expired";
+        payment.payment_date = payment.payment_date || now;
+        await payment.save(session ? { session } : undefined);
+      }
+
+      if (ACTIVE_BOOKING_STATUSES.includes(previousStatus)) {
+        await adjustPromotionUsage(booking, -1, session);
+      }
+
+      await enqueueDomainEventsTransactional(events, session);
+    });
+
+    await recordAuditLog({
+      action: "booking.hold_expired",
+      actor: null,
+      entityType: "booking",
+      entityId: booking._id.toString(),
+      metadata: {
+        bookingReference: booking.booking_reference,
+        previousStatus,
+        paymentStatus,
+      },
+    });
+
+    await invalidateBookingCache(booking.user_id);
+  }
+
+  if (staleBookings.length > 0) {
+    triggerOutboxFlush();
+  }
+}
+
 function serializeBookingListItem(booking) {
   return {
     ...booking,
@@ -1155,6 +1234,8 @@ router.get("/availability", publicRateLimit, async (req, res) => {
       return res.status(400).json({ error: "Guest count exceeds room capacity" });
     }
 
+    await expireStalePendingHolds(value.roomId, stay);
+
     const conflict = await findConflictingBooking(value.roomId, stay);
     const pricing = await calculateBookingPrice({
       room,
@@ -1533,6 +1614,8 @@ router.post("/", authenticate, bookingCreateRateLimit, async (req, res) => {
     if (numGuests > Number(room.capacity || 0)) {
       return res.status(400).json({ error: "Guest count exceeds room capacity" });
     }
+
+    await expireStalePendingHolds(roomId, stay);
 
     const conflict = await findConflictingBooking(roomId, stay);
     if (conflict) {
