@@ -22,6 +22,7 @@ const state = {
   roomId: "",
   createdBookingId: "",
   createdBookingReference: "",
+  createdBookingRequestCode: "",
   createdPaymentId: "",
   createdCheckoutSessionId: "",
   retryCheckoutSessionId: "",
@@ -375,6 +376,7 @@ test("landing booking request stores lead context without payment", async () => 
       guestPhone: "+84901234567",
       guestArea: "TP.HCM",
       guestEmail: "landing.guest@example.com",
+      noCombo: true,
       comboName: "Không chọn combo",
       estimatedTotal: 1200000,
       note: "Muốn nhân viên gọi lại.",
@@ -382,11 +384,191 @@ test("landing booking request stores lead context without payment", async () => 
   });
 
   assert.equal(leadResponse.status, 201);
+  assert.equal(leadResponse.body.success, true);
+  assert.match(leadResponse.body.requestCode, /^BRQ-/);
   assert.match(leadResponse.body.bookingRequest.requestReference, /^BRQ-/);
+  assert.equal(leadResponse.body.bookingRequest.requestCode, leadResponse.body.requestCode);
   assert.equal(leadResponse.body.bookingRequest.status, "new");
+  assert.equal(leadResponse.body.bookingRequest.noCombo, true);
   assert.equal(leadResponse.body.bookingRequest.guestContact.phone, "+84901234567");
   assert.equal(leadResponse.body.bookingRequest.combo.name, "Không chọn combo");
+  assert.equal(leadResponse.body.paymentUrl, undefined);
+  assert.equal(leadResponse.body.checkoutSession, undefined);
+  assert.equal(leadResponse.body.booking, undefined);
   assert.equal(leadResponse.body.bookingRequest.payment, undefined);
+  state.createdBookingRequestCode = leadResponse.body.requestCode;
+});
+
+test("landing booking request validates payload and combo consistency", async () => {
+  const invalidPhoneResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: state.roomId,
+      roomName: "Bella Test Room",
+      checkInDate: "2026-10-10",
+      checkOutDate: "2026-10-12",
+      numGuests: 2,
+      guestFullName: "Landing Guest",
+      guestPhone: "abc",
+      guestArea: "TP.HCM",
+      noCombo: true,
+    }),
+  });
+  assert.equal(invalidPhoneResponse.status, 400);
+  assert.match(invalidPhoneResponse.body.error, /phone/i);
+
+  const invalidDatesResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: state.roomId,
+      roomName: "Bella Test Room",
+      checkInDate: "2026-10-12",
+      checkOutDate: "2026-10-10",
+      numGuests: 2,
+      guestFullName: "Landing Guest",
+      guestPhone: "+84901234567",
+      guestArea: "TP.HCM",
+      noCombo: true,
+    }),
+  });
+  assert.equal(invalidDatesResponse.status, 400);
+  assert.match(invalidDatesResponse.body.error, /Check-out/i);
+
+  const comboConflictResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: state.roomId,
+      roomName: "Bella Test Room",
+      checkInDate: "2026-10-10",
+      checkOutDate: "2026-10-12",
+      numGuests: 2,
+      guestFullName: "Landing Guest",
+      guestPhone: "+84901234567",
+      guestArea: "TP.HCM",
+      noCombo: true,
+      comboSlug: "some-combo",
+    }),
+  });
+  assert.equal(comboConflictResponse.status, 400);
+  assert.match(comboConflictResponse.body.error, /no combo|selected combo/i);
+
+  const comboNameConflictResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: state.roomId,
+      roomName: "Bella Test Room",
+      checkInDate: "2026-10-10",
+      checkOutDate: "2026-10-12",
+      numGuests: 2,
+      guestFullName: "Landing Guest",
+      guestPhone: "+84901234567",
+      guestArea: "TP.HCM",
+      noCombo: true,
+      comboName: "Combo spa",
+    }),
+  });
+  assert.equal(comboNameConflictResponse.status, 400);
+  assert.match(comboNameConflictResponse.body.error, /no combo|selected combo/i);
+});
+
+test("landing booking request accepts a selected existing combo", async () => {
+  const combosResponse = await request(`${baseUrls.booking}/bookings/combos`);
+  assert.equal(combosResponse.status, 200);
+  const combo = combosResponse.body.combos[0];
+  assert.ok(combo?.slug);
+
+  const leadResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: state.roomId,
+      roomName: "Bella Test Room",
+      checkInDate: "2026-10-14",
+      checkOutDate: "2026-10-16",
+      numGuests: 2,
+      guestFullName: "Combo Guest",
+      guestPhone: "+84907654321",
+      guestArea: "Hà Nội",
+      noCombo: false,
+      comboSlug: combo.slug,
+    }),
+  });
+
+  assert.equal(leadResponse.status, 201);
+  assert.equal(leadResponse.body.bookingRequest.noCombo, false);
+  assert.equal(leadResponse.body.bookingRequest.combo.slug, combo.slug);
+});
+
+test("landing booking request accepts public payload aliases", async () => {
+  const leadResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomTypeId: "family-suite",
+      roomTypeName: "Family Suite",
+      checkInDate: "2026-10-18",
+      checkOutDate: "2026-10-20",
+      guests: 3,
+      fullName: "Alias Guest",
+      phone: "+84901112233",
+      address: "Đà Nẵng",
+      noCombo: true,
+    }),
+  });
+
+  assert.equal(leadResponse.status, 201);
+  assert.equal(leadResponse.body.bookingRequest.guestContact.fullName, "Alias Guest");
+  assert.equal(leadResponse.body.bookingRequest.guestContact.phone, "+84901112233");
+  assert.equal(leadResponse.body.bookingRequest.numGuests, 3);
+  assert.equal(leadResponse.body.bookingRequest.roomName, "Family Suite");
+  assert.equal(leadResponse.body.bookingRequest.noCombo, true);
+});
+
+test("admin booking request list is protected and includes lead fields", async () => {
+  const publicResponse = await request(`${baseUrls.booking}/booking-requests`);
+  assert.equal(publicResponse.status, 401);
+
+  const customerResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    headers: { Authorization: `Bearer ${state.userToken}` },
+  });
+  assert.equal(customerResponse.status, 403);
+
+  const adminResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    headers: { Authorization: `Bearer ${state.adminToken}` },
+  });
+  assert.equal(adminResponse.status, 200);
+  const createdLead = adminResponse.body.bookingRequests.find(
+    (requestItem) => requestItem.requestReference === state.createdBookingRequestCode,
+  );
+  assert.ok(createdLead);
+  assert.equal(createdLead.guestContact.fullName, "Landing Guest");
+  assert.equal(createdLead.guestContact.phone, "+84901234567");
+  assert.ok(createdLead.roomName);
+  assert.equal(createdLead.combo.name, "Không chọn combo");
+
+  const detailResponse = await request(`${baseUrls.booking}/booking-requests/${createdLead.id}`, {
+    headers: { Authorization: `Bearer ${state.adminToken}` },
+  });
+  assert.equal(detailResponse.status, 200);
+  assert.equal(detailResponse.body.bookingRequest.requestReference, state.createdBookingRequestCode);
+
+  const statusResponse = await request(`${baseUrls.booking}/booking-requests/${createdLead.id}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${state.adminToken}` },
+    body: JSON.stringify({ status: "contacted", internalNote: "Called guest once." }),
+  });
+  assert.equal(statusResponse.status, 200);
+  assert.equal(statusResponse.body.bookingRequest.status, "contacted");
+  assert.equal(statusResponse.body.bookingRequest.internalNote, "Called guest once.");
+
+  const auditResponse = await request(`${baseUrls.booking}/bookings/audit-logs`, {
+    headers: { Authorization: `Bearer ${state.adminToken}` },
+  });
+  assert.equal(auditResponse.status, 200);
+  assert.ok(
+    auditResponse.body.logs.some((log) => log.action === "sensitive.booking_request.list_viewed"),
+  );
+  assert.ok(
+    auditResponse.body.logs.some((log) => log.action === "sensitive.booking_request.detail_viewed"),
+  );
 });
 
 test("booking creation rejects missing rooms and invalid stay dates", async () => {

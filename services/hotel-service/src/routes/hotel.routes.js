@@ -1,7 +1,7 @@
 import express from "express";
 import Joi from "joi";
 import mongoose from "mongoose";
-import { Booking, Hotel, Room } from "../config/database.js";
+import { AuditLog, Booking, Hotel, Room } from "../config/database.js";
 import { getRedisClient } from "../config/redis.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import {
@@ -65,10 +65,54 @@ async function loadBellaHotelById(hotelId) {
   }).lean();
 }
 
+function buildRequestAuditMetadata(req, extra = {}) {
+  return {
+    ...extra,
+    ip: String(req.ip || "").replace(/^::ffff:/, "") || null,
+    userAgent: String(req.get("user-agent") || "").slice(0, 300) || null,
+  };
+}
+
+function pickRoomAuditFields(room) {
+  if (!room) return null;
+  return {
+    roomNumber: room.room_number,
+    roomType: room.room_type,
+    pricePerNight: room.price_per_night,
+    capacity: room.capacity,
+    isAvailable: room.is_available,
+    isActive: room.is_active,
+  };
+}
+
+async function recordAuditLog({ action, actor, entityType, entityId, metadata = {} }) {
+  try {
+    await AuditLog.create({
+      service: "hotel-service",
+      action,
+      actor_user_id: actor?.id || null,
+      actor_role: actor?.role || null,
+      entity_type: entityType,
+      entity_id: entityId,
+      metadata,
+    });
+  } catch (error) {
+    console.error("Hotel audit log error:", error);
+  }
+}
+
 // -- POST /admin/bella/metadata/sync ------------------------------------------
 router.post("/admin/bella/metadata/sync", authenticate, requireRole("admin"), async (req, res) => {
   try {
     const result = await syncBellaRoomMetadata();
+
+    await recordAuditLog({
+      action: "configuration.bella_metadata.synced",
+      actor: req.user,
+      entityType: "bella_room_metadata",
+      entityId: "landing_featured_rooms",
+      metadata: buildRequestAuditMetadata(req, { result }),
+    });
 
     res.json({
       message: "Bella room metadata synced successfully",
@@ -300,6 +344,18 @@ router.post("/:id/rooms", authenticate, requireRole("admin"), async (req, res) =
 
     await clearHotelCaches([`hotel:${id}:rooms:*`, `hotel:bella:${id}:rooms:*`]);
 
+    await recordAuditLog({
+      action: "configuration.room.created",
+      actor: req.user,
+      entityType: "room",
+      entityId: room._id.toString(),
+      metadata: buildRequestAuditMetadata(req, {
+        objectType: "room",
+        before: null,
+        after: pickRoomAuditFields(room),
+      }),
+    });
+
     res.status(201).json({
       message: "Room created successfully",
       room: { ...room.toObject(), id: room._id.toString() },
@@ -347,6 +403,8 @@ router.put(
         return res.status(404).json({ error: "Room not found" });
       }
 
+      const before = pickRoomAuditFields(room);
+
       if (value.roomNumber !== undefined) room.room_number = value.roomNumber;
       if (value.roomType !== undefined) room.room_type = value.roomType;
       if (value.description !== undefined) room.description = value.description || null;
@@ -361,6 +419,19 @@ router.put(
         `hotel:bella:${hotelId}:rooms:*`,
         `hotel:bella:${hotelId}:room:${roomId}`,
       ]);
+
+      await recordAuditLog({
+        action: "configuration.room.updated",
+        actor: req.user,
+        entityType: "room",
+        entityId: room._id.toString(),
+        metadata: buildRequestAuditMetadata(req, {
+          objectType: "room",
+          before,
+          after: pickRoomAuditFields(room),
+          changedFields: Object.keys(value),
+        }),
+      });
 
       res.json({
         message: "Room updated successfully",
@@ -402,6 +473,7 @@ router.delete(
 
       const bookingCount = await Booking.countDocuments({ room_id: room._id });
       if (bookingCount > 0) {
+        const before = pickRoomAuditFields(room);
         room.is_active = false;
         room.is_available = false;
         await room.save();
@@ -411,18 +483,43 @@ router.delete(
           `hotel:bella:${hotelId}:room:${roomId}`,
         ]);
 
+        await recordAuditLog({
+          action: "configuration.room.archived",
+          actor: req.user,
+          entityType: "room",
+          entityId: room._id.toString(),
+          metadata: buildRequestAuditMetadata(req, {
+            objectType: "room",
+            before,
+            after: pickRoomAuditFields(room),
+          }),
+        });
+
         return res.json({
           message: "Room archived because it already has booking history",
           room: { ...room.toObject(), id: room._id.toString() },
         });
       }
 
+      const before = pickRoomAuditFields(room);
       await room.deleteOne();
 
       await clearHotelCaches([
         `hotel:bella:${hotelId}:rooms:*`,
         `hotel:bella:${hotelId}:room:${roomId}`,
       ]);
+
+      await recordAuditLog({
+        action: "configuration.room.deleted",
+        actor: req.user,
+        entityType: "room",
+        entityId: room._id.toString(),
+        metadata: buildRequestAuditMetadata(req, {
+          objectType: "room",
+          before,
+          after: null,
+        }),
+      });
 
       res.json({ message: "Room deleted successfully" });
     } catch (error) {

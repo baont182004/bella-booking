@@ -162,11 +162,28 @@ comboSchema.index({ slug: 1 }, { unique: true });
 comboSchema.index({ is_active: 1, display_order: 1, base_price: 1 });
 comboSchema.index({ room_types_allowed: 1 });
 
+const auditLogSchema = new mongoose.Schema(
+  {
+    service: { type: String, required: true, trim: true },
+    action: { type: String, required: true, trim: true },
+    actor_user_id: { type: String, default: null },
+    actor_role: { type: String, default: null },
+    entity_type: { type: String, required: true, trim: true },
+    entity_id: { type: String, required: true, trim: true },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+  },
+  { timestamps: true, collection: "audit_logs" },
+);
+
+auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ service: 1, action: 1, createdAt: -1 });
+
 export const Hotel = mongoose.model("Hotel", hotelSchema);
 export const Room = mongoose.model("Room", roomSchema);
 export const Booking = mongoose.model("Booking", bookingSchema);
 export const Combo = mongoose.models.Combo || mongoose.model("Combo", comboSchema);
 export const User = mongoose.models.User || mongoose.model("User", userSchema);
+export const AuditLog = mongoose.models.AuditLog || mongoose.model("AuditLog", auditLogSchema);
 
 export async function connectDatabase() {
   try {

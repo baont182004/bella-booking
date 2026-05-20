@@ -5,6 +5,7 @@
   "scripts": {
     "backend:up": "docker compose up -d --build",
     "backend:down": "docker compose down",
+    "install:services": "npm --prefix services/user-service install && npm --prefix services/hotel-service install && npm --prefix services/booking-service install && npm --prefix services/payment-service install && npm --prefix services/notification-service install",
     "seed:demo": "node scripts/reset-demo-data.mjs",
     "seed:admin": "node scripts/ensure-admin.mjs",
     "test:unit": "node --test tests/*.unit.test.mjs",

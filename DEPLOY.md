@@ -112,6 +112,16 @@ Fill real secrets manually, especially:
 - `DEMO_ADMIN_PASSWORD` if enabling demo admin bootstrap
 - Stripe variables if `PAYMENT_PROVIDER=stripe`
 - SMTP variables if sending real email
+- `STAFF_NOTIFICATION_EMAIL` or `ADMIN_EMAIL` so booking request leads are routed to staff
+
+The landing page lead flow stores records in MongoDB collection `booking_requests`. If production disables Mongoose auto-index creation, create these indexes before launch:
+
+```js
+db.booking_requests.createIndex({ request_reference: 1 }, { unique: true })
+db.booking_requests.createIndex({ status: 1, createdAt: -1 })
+db.booking_requests.createIndex({ guest_phone: 1, createdAt: -1 })
+db.booking_requests.createIndex({ room_code: 1, check_in_date: 1 })
+```
 
 Validate and start:
 
@@ -155,6 +165,14 @@ The config proxies public API paths to localhost-only Docker port bindings:
 - `/notifications` to notification-service
 
 It also accepts equivalent `/api/...` paths for future gateway-style clients.
+
+If the Vite frontend is served by Nginx instead of Vercel, make sure React routes fall back to the SPA entry file so direct refresh on `/rooms`, `/rooms/:code`, `/admin`, and similar routes does not return 404:
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
 
 ## G. Configure HTTPS
 

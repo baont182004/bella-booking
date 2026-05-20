@@ -1,8 +1,8 @@
 export const bellaContent = {
   meta: {
-    title: "Bella Hotel Phú Quốc | Đặt phòng trực tiếp",
+    title: "Bella Hotel Phú Quốc | Giữ chỗ và tư vấn trực tiếp",
     description:
-      "Khám phá Bella Hotel Phú Quốc với các hạng phòng hướng biển, vị trí gần Sunset Town và quy trình đặt phòng trực tiếp, gọn gàng.",
+      "Khám phá Bella Hotel Phú Quốc với các hạng phòng hướng biển, vị trí gần Sunset Town và quy trình giữ chỗ để nhân viên xác nhận.",
   },
   property: {
     name: "BELLA HOTEL Phu Quoc",
@@ -45,13 +45,18 @@ export const bellaContent = {
     ],
     finalCtaTitle: "Sẵn sàng chọn hạng phòng phù hợp cho kỳ nghỉ tại Phú Quốc?",
     finalCtaCopy:
-      "Xem chi tiết từng hạng phòng, kiểm tra giá hiện tại và hoàn tất đặt phòng trực tiếp tại Bella Hotel Phú Quốc.",
+      "Xem chi tiết từng hạng phòng, kiểm tra giá hiện tại và để lại thông tin để nhân viên Bella xác nhận.",
   },
   social: {
     facebook: {
       url: "https://www.facebook.com/people/Bella-Hotel-Ph%C3%BA-Qu%E1%BB%91c/61564741114129/",
       label: "Bella Hotel Phú Quốc trên Facebook",
       supportingCopy: "Cập nhật hình ảnh và thông tin mới trên fanpage chính thức của khách sạn.",
+    },
+    tiktok: {
+      url: "https://www.tiktok.com/@bella_phuquoc_882",
+      label: "Bella Hotel Phú Quốc trên TikTok",
+      supportingCopy: "Xem video ngắn và hình ảnh cập nhật từ kênh TikTok chính thức của Bella.",
     },
   },
   trust: {

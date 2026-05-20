@@ -7,12 +7,14 @@
 Command:
 
 ```bash
+npm run install:services
 npm run test:api
 ```
 
 Notes:
 
 - The API harness waits for backend health endpoints before seeding and executing requests, so it is stable immediately after `npm run backend:up`.
+- The suite expects Bella services on ports `3001-3005`. A health response from another service means the local port is occupied and the integration run is invalid.
 
 Coverage:
 
@@ -22,6 +24,9 @@ Coverage:
 - room retrieval
 - availability with promotion pricing
 - booking creation with booking reference
+- landing booking-request lead creation without payment URL or checkout session
+- booking-request validation for phone, stay dates, room context, and combo/no-combo consistency
+- admin-only booking-request list access
 - overlap rejection
 - public booking lookup
 - invalid promo rejection

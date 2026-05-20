@@ -40,7 +40,7 @@ export default function CombosPage() {
                   <h1 className="section-title">{combo.name}</h1>
                   <p className="section-copy">{combo.description}</p>
                   <div className="combo-detail-actions">
-                    <Link to="/rooms" className="button button-primary">Chọn phòng để đặt combo</Link>
+                    <Link to="/rooms" className="button button-primary">Chọn phòng để xem combo phù hợp</Link>
                     <Link to="/combos" className="button button-secondary">Xem combo khác</Link>
                   </div>
                 </div>

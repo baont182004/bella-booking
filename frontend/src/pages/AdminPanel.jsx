@@ -38,6 +38,8 @@ export default function AdminPanel() {
   const [rooms, setRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [bookingRequests, setBookingRequests] = useState([]);
+  const [selectedBookingRequest, setSelectedBookingRequest] = useState(null);
+  const [bookingRequestNoteDraft, setBookingRequestNoteDraft] = useState("");
   const [promotions, setPromotions] = useState([]);
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -173,6 +175,32 @@ export default function AdminPanel() {
     }
   };
 
+  const handleViewBookingRequest = async (requestId) => {
+    try {
+      const response = await bookingApi.get(`/booking-requests/${requestId}`);
+      const nextRequest = response.data.bookingRequest;
+      setSelectedBookingRequest(nextRequest);
+      setBookingRequestNoteDraft(nextRequest.internalNote || "");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Không thể tải chi tiết yêu cầu giữ chỗ.");
+    }
+  };
+
+  const handleBookingRequestUpdate = async (requestId, updates) => {
+    try {
+      const response = await bookingApi.patch(`/booking-requests/${requestId}`, updates);
+      const nextRequest = response.data.bookingRequest;
+      setBookingRequests((prev) =>
+        prev.map((request) => (request.id === nextRequest.id ? nextRequest : request)),
+      );
+      setSelectedBookingRequest(nextRequest);
+      setBookingRequestNoteDraft(nextRequest.internalNote || "");
+      toast.success("Đã cập nhật yêu cầu giữ chỗ.");
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Không thể cập nhật yêu cầu giữ chỗ.");
+    }
+  };
+
   const handleCreatePromotion = async (event) => {
     event.preventDefault();
 
@@ -232,6 +260,13 @@ export default function AdminPanel() {
     if (promotionFilter === "active") return promotions.filter((promotion) => promotion.isActive);
     return promotions.filter((promotion) => !promotion.isActive);
   }, [promotionFilter, promotions]);
+
+  const bookingRequestStatusLabels = {
+    new: "Mới",
+    contacted: "Đã liên hệ",
+    confirmed: "Đã xác nhận",
+    cancelled: "Đã hủy",
+  };
 
   if (loading && !stats) {
     return (
@@ -307,11 +342,21 @@ export default function AdminPanel() {
                       {request.numGuests} khách
                     </p>
                     <p>Combo: {request.combo?.name || "Không chọn combo"}</p>
+                    <p>Tạo lúc: {formatDate(request.createdAt)}</p>
                     {request.note ? <p>Ghi chú: {request.note}</p> : null}
                   </div>
-                  <span className="status-pill status-pill-pending">
-                    {request.status === "new" ? "Mới" : request.status}
-                  </span>
+                  <div className="admin-status-actions">
+                    <span className="status-pill status-pill-pending">
+                      {bookingRequestStatusLabels[request.status] || request.status}
+                    </span>
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      onClick={() => handleViewBookingRequest(request.id)}
+                    >
+                      Xem chi tiết
+                    </button>
+                  </div>
                 </article>
               ))
             ) : (
@@ -322,6 +367,111 @@ export default function AdminPanel() {
               </div>
             )}
           </div>
+
+          {selectedBookingRequest ? (
+            <div className="admin-detail-panel" data-testid="admin-booking-request-detail">
+              <div className="admin-detail-panel-head">
+                <div>
+                  <p className="eyebrow">Chi tiết lead</p>
+                  <h3>{selectedBookingRequest.requestReference}</h3>
+                </div>
+                <button
+                  type="button"
+                  className="button button-ghost"
+                  onClick={() => setSelectedBookingRequest(null)}
+                >
+                  Đóng
+                </button>
+              </div>
+
+              <div className="admin-detail-grid">
+                <div>
+                  <span>Khách</span>
+                  <strong>{selectedBookingRequest.guestContact?.fullName}</strong>
+                </div>
+                <div>
+                  <span>Số điện thoại</span>
+                  <strong>{selectedBookingRequest.guestContact?.phone}</strong>
+                </div>
+                <div>
+                  <span>Khu vực</span>
+                  <strong>{selectedBookingRequest.guestContact?.area}</strong>
+                </div>
+                <div>
+                  <span>Email</span>
+                  <strong>{selectedBookingRequest.guestContact?.email || "Không cung cấp"}</strong>
+                </div>
+                <div>
+                  <span>Ngày nhận / trả</span>
+                  <strong>
+                    {formatDateRange(selectedBookingRequest.checkInDate, selectedBookingRequest.checkOutDate)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Số khách</span>
+                  <strong>{selectedBookingRequest.numGuests} khách</strong>
+                </div>
+                <div>
+                  <span>Phòng quan tâm</span>
+                  <strong>{selectedBookingRequest.roomName}</strong>
+                </div>
+                <div>
+                  <span>Combo</span>
+                  <strong>{selectedBookingRequest.combo?.name || "Không chọn combo"}</strong>
+                </div>
+                <div>
+                  <span>Trạng thái</span>
+                  <strong>{bookingRequestStatusLabels[selectedBookingRequest.status] || selectedBookingRequest.status}</strong>
+                </div>
+                <div>
+                  <span>Thời gian tạo</span>
+                  <strong>{formatDate(selectedBookingRequest.createdAt)}</strong>
+                </div>
+              </div>
+
+              {selectedBookingRequest.note ? (
+                <div className="admin-detail-note">
+                  <span>Ghi chú của khách</span>
+                  <p>{selectedBookingRequest.note}</p>
+                </div>
+              ) : null}
+
+              <div className="admin-detail-actions">
+                {["new", "contacted", "confirmed", "cancelled"].map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className="button button-secondary"
+                    disabled={selectedBookingRequest.status === status}
+                    onClick={() => handleBookingRequestUpdate(selectedBookingRequest.id, { status })}
+                  >
+                    {bookingRequestStatusLabels[status]}
+                  </button>
+                ))}
+              </div>
+
+              <label className="form-field">
+                <span>Ghi chú nội bộ</span>
+                <textarea
+                  className="textarea-shell"
+                  value={bookingRequestNoteDraft}
+                  onChange={(event) => setBookingRequestNoteDraft(event.target.value)}
+                  placeholder="Ghi lại lần gọi, kênh liên hệ hoặc yêu cầu cần xử lý tiếp."
+                />
+              </label>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() =>
+                  handleBookingRequestUpdate(selectedBookingRequest.id, {
+                    internalNote: bookingRequestNoteDraft,
+                  })
+                }
+              >
+                Lưu ghi chú nội bộ
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <div className="stats-row stats-row-four">
@@ -753,11 +903,11 @@ export default function AdminPanel() {
               {logs.length ? (
                 logs.map((log) => (
                   <article key={log.id} className="admin-log-item">
-                    <strong>{log.action}</strong>
+                    <strong>{formatDate(log.createdAt)} - {log.actorUserId || "system"} - {log.action} - {log.entityId}</strong>
                     <p>
-                      {log.entityType} · {log.entityId}
+                      {log.service || "service"} · {log.entityType}
                     </p>
-                    <span>{formatDate(log.createdAt)}</span>
+                    {log.metadata?.objectType ? <span>{log.metadata.objectType}</span> : null}
                   </article>
                 ))
               ) : (

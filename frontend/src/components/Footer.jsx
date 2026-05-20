@@ -68,6 +68,12 @@ export default function Footer() {
                 compact
                 title="Theo dõi Bella Hotel Phú Quốc trên Facebook"
               />
+              <SocialChannelLink
+                className="footer-social-channel"
+                compact
+                channel="tiktok"
+                title="Theo dõi Bella trên TikTok"
+              />
               <Link to="/#location">Vị trí khách sạn</Link>
               <Link to="/#reviews">Đánh giá khách lưu trú</Link>
               <Link to="/rooms">Tư vấn chọn phòng</Link>

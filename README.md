@@ -63,6 +63,7 @@ npm run dev
 ```bash
 npm run backend:up
 npm run backend:down
+npm run install:services
 npm run seed:demo
 npm run test:api
 npm run frontend:lint
@@ -86,10 +87,13 @@ npm run frontend:build
 The current repo has been verified with:
 
 ```bash
+npm run install:services
 npm run test:api
 npm run frontend:lint
 npm run frontend:build
 ```
+
+`npm run test:api` expects the Bella backend services to be running on ports `3001-3005`. If a different local service is bound to one of those ports, stop it before running the integration suite.
 
 ## Documentation
 

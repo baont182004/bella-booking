@@ -334,7 +334,7 @@ export default function RoomDetailPage() {
       return;
     }
 
-    if (!room?.id) {
+    if (!room?.code && !room?.displayName) {
       toast.error("Bella chưa nhận diện được hạng phòng bạn đang quan tâm.");
       return;
     }
@@ -342,7 +342,8 @@ export default function RoomDetailPage() {
     try {
       setIsSubmitting(true);
       const response = await bookingApi.post("/booking-requests", {
-        roomId: room.id,
+        roomId: room.id || undefined,
+        roomTypeId: room.id || room.code,
         roomCode: room.code,
         roomName: room.displayName,
         checkInDate: bookingData.checkInDate,
@@ -353,16 +354,21 @@ export default function RoomDetailPage() {
         guestPhone: bookingData.guestPhone.trim(),
         guestArea: bookingData.guestArea.trim(),
         note: bookingData.specialRequests.trim() || undefined,
+        noCombo: !selectedCombo,
         comboSlug: selectedCombo?.slug || undefined,
         comboName: selectedCombo?.name || "Không chọn combo",
         estimatedTotal: serverEstimatedTotal || 0,
         context: {
           landingPath: `${location.pathname}${location.search}${location.hash}`,
           roomIsLive: Boolean(room.isLive),
+          roomSlug: room.code,
+          roomPrice: room.pricing?.currentPrice || null,
+          roomCapacity: room.capacity || room.maxOccupancy || null,
+          roomBedSummary: getReadableBedSummary(room.bedConfigs),
         },
       });
       setBookingResult(response.data.bookingRequest);
-      toast.success("Bella đã nhận thông tin giữ chỗ.");
+      toast.success("Bella đã nhận thông tin giữ chỗ của bạn. Nhân viên sẽ liên hệ xác nhận trong thời gian sớm nhất.");
       scrollToSection("book");
     } catch (error) {
       toast.error(error.response?.data?.error || "Không thể gửi yêu cầu giữ chỗ.");
@@ -850,7 +856,8 @@ export default function RoomDetailPage() {
                       </div>
                     ) : (
                       <p className="field-note">
-                        Chưa có combo phù hợp với hạng phòng, số khách hoặc thời gian lưu trú này.
+                        Hiện chưa có combo phù hợp với hạng phòng/thời gian lưu trú này. Bạn vẫn
+                        có thể gửi yêu cầu tư vấn, nhân viên Bella sẽ gợi ý thêm khi liên hệ.
                       </p>
                     )}
                   </div>
@@ -1064,7 +1071,7 @@ export default function RoomDetailPage() {
                     {bookingResult
                       ? "Đã gửi yêu cầu"
                       : room.isLive
-                        ? "Giữ chỗ"
+                        ? "Gửi yêu cầu giữ chỗ"
                         : "Yêu cầu nhân viên liên hệ"}
                   </button>
                 </form>
@@ -1076,7 +1083,7 @@ export default function RoomDetailPage() {
                   >
                     <div className="booking-confirmation-row">
                       <span>Kết quả</span>
-                      <strong>Bella đã nhận thông tin giữ chỗ</strong>
+                      <strong>Bella đã nhận thông tin giữ chỗ của bạn</strong>
                     </div>
                     <div className="booking-confirmation-row">
                       <span>Mã yêu cầu</span>

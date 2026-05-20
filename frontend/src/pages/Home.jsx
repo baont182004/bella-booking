@@ -329,12 +329,17 @@ export default function Home() {
               <div className="location-social-proof">
                 <p className="eyebrow">Kênh cập nhật</p>
                 <p className="location-social-copy">
-                  Theo dõi Bella Hotel Phú Quốc trên Facebook để xem thêm hình ảnh mới, thông tin
-                  lưu trú và nhịp hoạt động thực tế của khách sạn trước khi đặt.
+                  Theo dõi Bella Hotel Phú Quốc trên Facebook và TikTok để xem thêm hình ảnh mới,
+                  thông tin lưu trú và nhịp hoạt động thực tế của khách sạn trước khi gửi yêu cầu.
                 </p>
                 <SocialChannelLink
                   title="Xem fanpage Facebook"
                   description="Mở fanpage chính thức trong tab mới để theo dõi các cập nhật gần đây của Bella."
+                />
+                <SocialChannelLink
+                  channel="tiktok"
+                  title="Xem TikTok Bella"
+                  description="Mở kênh TikTok chính thức trong tab mới để xem thêm video và hình ảnh thực tế."
                 />
               </div>
 

@@ -7,15 +7,19 @@ function joinClassNames(...values) {
 
 export default function SocialChannelLink({
   className = "",
-  title = "Xem fanpage Facebook",
-  description = bellaContent.social.facebook.supportingCopy,
+  channel = "facebook",
+  title,
+  description,
   compact = false,
 }) {
-  const facebook = bellaContent.social.facebook;
+  const socialChannel = bellaContent.social[channel] || bellaContent.social.facebook;
+  const isFacebook = channel === "facebook";
+  const nextTitle = title || (isFacebook ? "Xem fanpage Facebook" : "Xem TikTok Bella");
+  const nextDescription = description || socialChannel.supportingCopy;
 
   return (
     <a
-      href={facebook.url}
+      href={socialChannel.url}
       target="_blank"
       rel="noopener noreferrer"
       className={joinClassNames(
@@ -23,14 +27,14 @@ export default function SocialChannelLink({
         compact ? "social-channel-link-compact" : "",
         className,
       )}
-      aria-label={`Mở ${facebook.label} trong tab mới`}
+      aria-label={`Mở ${socialChannel.label} trong tab mới`}
     >
       <span className="social-channel-icon" aria-hidden="true">
-        <Facebook size={compact ? 16 : 18} />
+        {isFacebook ? <Facebook size={compact ? 16 : 18} /> : <strong>TikTok</strong>}
       </span>
       <span className="social-channel-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
+        <strong>{nextTitle}</strong>
+        <span>{nextDescription}</span>
       </span>
       <ExternalLink size={16} className="social-channel-arrow" aria-hidden="true" />
     </a>

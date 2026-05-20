@@ -51,6 +51,17 @@ const bookingCreateRateLimit = createRateLimiter({
   keyBuilder: (req) => `${String(req.ip || "unknown").replace(/^::ffff:/, "")}:${req.user?.id || "anonymous"}`,
   prefix: "booking-create",
 });
+const bookingRequestRateLimit = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 8,
+  message: "Too many booking requests. Please wait a moment and try again.",
+  keyBuilder: (req) => {
+    const ip = String(req.ip || "unknown").replace(/^::ffff:/, "");
+    const phone = String(req.body?.guestPhone || req.body?.phone || "anonymous").replace(/\D/g, "").slice(-10);
+    return `${ip}:${phone || "anonymous"}`;
+  },
+  prefix: "booking-request-create",
+});
 
 const dateSchema = Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -75,16 +86,28 @@ const bookingSchema = Joi.object({
 
 const bookingRequestSchema = Joi.object({
   roomId: Joi.string().allow("").optional(),
+  roomTypeId: Joi.string().allow("").optional(),
   roomCode: Joi.string().trim().lowercase().max(120).allow("").optional(),
-  roomName: Joi.string().trim().min(2).max(180).required(),
+  roomName: Joi.string().trim().min(2).max(180).allow("").optional(),
+  roomTypeName: Joi.string().trim().min(2).max(180).allow("").optional(),
   checkInDate: dateSchema.required(),
   checkOutDate: dateSchema.required(),
   numGuests: Joi.number().integer().positive().required(),
   guestFullName: Joi.string().trim().min(2).max(120).required(),
-  guestPhone: Joi.string().trim().min(6).max(40).required(),
+  guestPhone: Joi.string()
+    .trim()
+    .min(6)
+    .max(40)
+    .pattern(/^\+?[0-9][0-9\s().-]{5,39}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "Enter a valid phone number.",
+    }),
   guestArea: Joi.string().trim().min(2).max(180).required(),
   guestEmail: Joi.string().trim().lowercase().email().allow("").optional(),
   note: Joi.string().trim().max(1000).allow("").optional(),
+  noCombo: Joi.boolean().default(false),
+  comboId: Joi.string().allow("").optional(),
   comboSlug: Joi.string().trim().lowercase().pattern(/^[a-z0-9-]+$/).allow("").optional(),
   comboName: Joi.string().trim().max(160).allow("").optional(),
   estimatedTotal: Joi.number().min(0).optional(),
@@ -93,7 +116,44 @@ const bookingRequestSchema = Joi.object({
     roomIsLive: Joi.boolean().optional(),
     userAgent: Joi.string().trim().max(300).allow("").optional(),
   }).default({}),
-}).unknown(false);
+})
+  .custom((value, helpers) => {
+    if (!value.roomId && !value.roomTypeId && !value.roomName && !value.roomTypeName) {
+      return helpers.error("any.custom", {
+        message: "Room context is required.",
+      });
+    }
+
+    const comboName = String(value.comboName || "").trim();
+    const hasNamedCombo = comboName && comboName !== "Không chọn combo";
+    if (value.noCombo && (value.comboId || value.comboSlug || hasNamedCombo)) {
+      return helpers.error("any.custom", {
+        message: "Choose either no combo or one selected combo, not both.",
+      });
+    }
+
+    return value;
+  })
+  .messages({
+    "any.custom": "{{#message}}",
+  })
+  .unknown(false);
+
+function normalizeBookingRequestPayload(body = {}) {
+  const payload = { ...body };
+  payload.guestFullName = payload.guestFullName ?? payload.fullName;
+  payload.guestPhone = payload.guestPhone ?? payload.phone;
+  payload.guestArea = payload.guestArea ?? payload.area ?? payload.address;
+  payload.numGuests = payload.numGuests ?? payload.guests;
+
+  delete payload.fullName;
+  delete payload.phone;
+  delete payload.area;
+  delete payload.address;
+  delete payload.guests;
+
+  return payload;
+}
 
 const availabilityQuerySchema = Joi.object({
   roomId: Joi.string().required(),
@@ -161,10 +221,17 @@ const listQuerySchema = Joi.object({
 }).unknown(false);
 
 const bookingRequestListQuerySchema = Joi.object({
-  status: Joi.string().valid("new", "contacted", "converted", "closed").allow("").default(""),
+  status: Joi.string().valid("new", "contacted", "confirmed", "cancelled").allow("").default(""),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(50).default(20),
 }).unknown(false);
+
+const bookingRequestUpdateSchema = Joi.object({
+  status: Joi.string().valid("new", "contacted", "confirmed", "cancelled").optional(),
+  internalNote: Joi.string().trim().max(1000).allow("").optional(),
+})
+  .min(1)
+  .unknown(false);
 
 const statusSchema = Joi.object({
   status: Joi.string()
@@ -517,6 +584,14 @@ async function recordAuditLog({ action, actor, entityType, entityId, metadata = 
   } catch (error) {
     console.error("Audit log error:", error);
   }
+}
+
+function buildRequestAuditMetadata(req, extra = {}) {
+  return {
+    ...extra,
+    ip: String(req.ip || "").replace(/^::ffff:/, "") || null,
+    userAgent: String(req.get("user-agent") || "").slice(0, 300) || null,
+  };
 }
 
 async function invalidateBookingCache(userId) {
@@ -1009,6 +1084,7 @@ function serializeBookingRequest(bookingRequest) {
       email: bookingRequest.guest_email,
     },
     note: bookingRequest.note,
+    noCombo: bookingRequest.no_combo,
     combo: bookingRequest.combo_snapshot
       ? serializeComboSnapshot(bookingRequest.combo_snapshot)
       : {
@@ -1017,6 +1093,8 @@ function serializeBookingRequest(bookingRequest) {
         },
     estimatedTotal: bookingRequest.estimated_total,
     context: bookingRequest.context || {},
+    internalNote: bookingRequest.internal_note || "",
+    requestCode: bookingRequest.request_reference,
     createdAt: bookingRequest.createdAt,
     updatedAt: bookingRequest.updatedAt,
   };
@@ -1361,9 +1439,9 @@ router.get("/availability", publicRateLimit, async (req, res) => {
 });
 
 // -- POST /booking-requests -----------------------------------------------------
-router.post("/booking-requests", publicRateLimit, async (req, res) => {
+router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
   try {
-    const { error, value } = bookingRequestSchema.validate(req.body);
+    const { error, value } = bookingRequestSchema.validate(normalizeBookingRequestPayload(req.body));
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }
@@ -1387,29 +1465,42 @@ router.post("/booking-requests", publicRateLimit, async (req, res) => {
     }
 
     let comboSnapshot = null;
-    if (value.comboSlug) {
-      const combo = await Combo.findOne({ slug: value.comboSlug }).lean();
-      if (combo) {
-        comboSnapshot = {
-          combo_id: combo._id,
-          slug: combo.slug,
-          name: combo.name,
-          price: Number(combo.base_price || 0),
-          price_type: combo.price_type,
-          included_services: combo.included_services || [],
-          duration_label: combo.duration_label,
-          suitable_for: combo.suitable_for,
-        };
+    if (value.comboId || value.comboSlug) {
+      if (value.comboId && !mongoose.Types.ObjectId.isValid(value.comboId)) {
+        return res.status(400).json({ error: "Invalid combo id" });
       }
+
+      const comboQuery = value.comboId
+        ? { _id: value.comboId }
+        : { slug: value.comboSlug };
+      const combo = await Combo.findOne(comboQuery).lean();
+      if (!combo) {
+        return res.status(404).json({ error: "Bella combo not found" });
+      }
+
+      comboSnapshot = {
+        combo_id: combo._id,
+        slug: combo.slug,
+        name: combo.name,
+        price: Number(combo.base_price || 0),
+        price_type: combo.price_type,
+        included_services: combo.included_services || [],
+        duration_label: combo.duration_label,
+        suitable_for: combo.suitable_for,
+      };
     }
 
     const requestReference = await generateUniqueBookingRequestReference();
+    const comboName = String(value.comboName || "").trim();
+    const noComboSelected = Boolean(
+      value.noCombo || (!comboSnapshot && (!comboName || comboName === "Không chọn combo")),
+    );
     const bookingRequest = new BookingRequest({
       request_reference: requestReference,
       source: "landing_page",
       room_id: room?._id || null,
       room_code: value.roomCode || room?.code || null,
-      room_name: room?.localized_name?.vi || room?.room_type || value.roomName,
+      room_name: room?.localized_name?.vi || room?.room_type || value.roomName || value.roomTypeName,
       check_in_date: stay.checkIn,
       check_out_date: stay.checkOut,
       nights: stay.nights,
@@ -1419,12 +1510,14 @@ router.post("/booking-requests", publicRateLimit, async (req, res) => {
       guest_area: value.guestArea,
       guest_email: value.guestEmail || null,
       note: value.note || "",
-      combo_slug: value.comboSlug || null,
-      combo_name: comboSnapshot?.name || value.comboName || "Không chọn combo",
+      combo_slug: noComboSelected ? null : comboSnapshot?.slug || value.comboSlug || null,
+      combo_name: noComboSelected ? "Không chọn combo" : comboSnapshot?.name || comboName || "Không chọn combo",
+      no_combo: noComboSelected,
       combo_snapshot: comboSnapshot,
       estimated_total: Number(value.estimatedTotal || 0),
       context: {
         ...value.context,
+        roomTypeId: value.roomTypeId || null,
         roomIsLive: value.context?.roomIsLive ?? Boolean(room?.is_available),
         userAgent: String(req.get("user-agent") || value.context?.userAgent || "").slice(0, 300),
       },
@@ -1476,7 +1569,9 @@ router.post("/booking-requests", publicRateLimit, async (req, res) => {
     });
 
     res.status(201).json({
+      success: true,
       message: "Booking request received",
+      requestCode: requestReference,
       bookingRequest: serializeBookingRequest(bookingRequest),
     });
   } catch (error) {
@@ -1503,6 +1598,19 @@ router.get("/booking-requests", authenticate, requireRole("admin"), async (req, 
       BookingRequest.countDocuments(where),
     ]);
 
+    await recordAuditLog({
+      action: "sensitive.booking_request.list_viewed",
+      actor: req.user,
+      entityType: "booking_request",
+      entityId: "list",
+      metadata: buildRequestAuditMetadata(req, {
+        status: value.status || "all",
+        page: value.page,
+        limit: value.limit,
+        resultCount: requests.length,
+      }),
+    });
+
     res.json({
       bookingRequests: requests.map(serializeBookingRequest),
       pagination: {
@@ -1515,6 +1623,98 @@ router.get("/booking-requests", authenticate, requireRole("admin"), async (req, 
   } catch (error) {
     console.error("List booking requests error:", error);
     res.status(500).json({ error: "Failed to fetch booking requests" });
+  }
+});
+
+// -- GET /booking-requests/:id -------------------------------------------------
+router.get("/booking-requests/:id", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid booking request id" });
+    }
+
+    const bookingRequest = await BookingRequest.findById(req.params.id).lean();
+    if (!bookingRequest) {
+      return res.status(404).json({ error: "Booking request not found" });
+    }
+
+    await recordAuditLog({
+      action: "sensitive.booking_request.detail_viewed",
+      actor: req.user,
+      entityType: "booking_request",
+      entityId: bookingRequest._id.toString(),
+      metadata: buildRequestAuditMetadata(req, {
+        requestReference: bookingRequest.request_reference,
+        status: bookingRequest.status,
+      }),
+    });
+
+    res.json({ bookingRequest: serializeBookingRequest(bookingRequest) });
+  } catch (error) {
+    console.error("Booking request detail error:", error);
+    res.status(500).json({ error: "Failed to fetch booking request" });
+  }
+});
+
+// -- PATCH /booking-requests/:id -----------------------------------------------
+router.patch("/booking-requests/:id", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid booking request id" });
+    }
+
+    const { error, value } = bookingRequestUpdateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const bookingRequest = await BookingRequest.findById(req.params.id);
+    if (!bookingRequest) {
+      return res.status(404).json({ error: "Booking request not found" });
+    }
+
+    const before = {
+      status: bookingRequest.status,
+      internalNoteLength: bookingRequest.internal_note?.length || 0,
+    };
+
+    if (value.status !== undefined) {
+      bookingRequest.status = value.status;
+      if (value.status === "contacted" && !bookingRequest.contacted_at) {
+        bookingRequest.contacted_at = new Date();
+      }
+      if (["confirmed", "cancelled"].includes(value.status) && !bookingRequest.closed_at) {
+        bookingRequest.closed_at = new Date();
+      }
+    }
+    if (value.internalNote !== undefined) {
+      bookingRequest.internal_note = value.internalNote;
+    }
+
+    await bookingRequest.save();
+
+    await recordAuditLog({
+      action: "booking_request.updated",
+      actor: req.user,
+      entityType: "booking_request",
+      entityId: bookingRequest._id.toString(),
+      metadata: buildRequestAuditMetadata(req, {
+        requestReference: bookingRequest.request_reference,
+        before,
+        after: {
+          status: bookingRequest.status,
+          internalNoteLength: bookingRequest.internal_note?.length || 0,
+        },
+      }),
+    });
+
+    res.json({
+      message: "Booking request updated successfully",
+      bookingRequest: serializeBookingRequest(bookingRequest),
+    });
+  } catch (error) {
+    console.error("Update booking request error:", error);
+    res.status(500).json({ error: "Failed to update booking request" });
   }
 });
 
@@ -1783,7 +1983,7 @@ router.get("/audit-logs", authenticate, requireRole("admin"), async (req, res) =
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const logs = await AuditLog.find({ service: "booking-service" })
+    const logs = await AuditLog.find({ service: { $in: ["booking-service", "hotel-service", "payment-service"] } })
       .sort({ createdAt: -1 })
       .limit(value.limit)
       .lean();
@@ -1791,6 +1991,7 @@ router.get("/audit-logs", authenticate, requireRole("admin"), async (req, res) =
     res.json({
       logs: logs.map((log) => ({
         id: log._id.toString(),
+        service: log.service,
         action: log.action,
         actorUserId: log.actor_user_id,
         actorRole: log.actor_role,

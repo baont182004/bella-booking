@@ -221,8 +221,8 @@ bookingSchema.index({ user_id: 1, status: 1, createdAt: -1 });
 const BOOKING_REQUEST_STATUSES = [
   "new",
   "contacted",
-  "converted",
-  "closed",
+  "confirmed",
+  "cancelled",
 ];
 
 const bookingRequestSchema = new mongoose.Schema(
@@ -252,9 +252,11 @@ const bookingRequestSchema = new mongoose.Schema(
     note: { type: String, default: "" },
     combo_slug: { type: String, default: null },
     combo_name: { type: String, default: "Không chọn combo" },
+    no_combo: { type: Boolean, default: true },
     combo_snapshot: { type: comboSnapshotSchema, default: null },
     estimated_total: { type: Number, default: 0, min: 0 },
     context: { type: mongoose.Schema.Types.Mixed, default: {} },
+    internal_note: { type: String, default: "" },
     contacted_at: { type: Date, default: null },
     closed_at: { type: Date, default: null },
   },

@@ -42,7 +42,7 @@ export default function RoomCard({ room, variant = "listing", className = "", qu
                 : "room-preview-badge"
             }
           >
-            {room.isLive ? "Đặt trực tuyến" : "Xem trước"}
+            {room.isLive ? "Đang nhận giữ chỗ" : "Tư vấn thủ công"}
           </span>
         </div>
       </div>
@@ -97,7 +97,7 @@ export default function RoomCard({ room, variant = "listing", className = "", qu
             className="button button-primary"
             data-testid={`book-room-${room.code}`}
           >
-            {room.isLive ? "Chọn phòng" : "Yêu cầu tư vấn"}
+            Yêu cầu tư vấn
             <ArrowRight size={16} />
           </Link>
         </div>
