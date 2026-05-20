@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import {
   AuditLog,
   Booking,
+  BookingRequest,
   Combo,
   Hotel,
   Payment,
@@ -72,6 +73,28 @@ const bookingSchema = Joi.object({
   promotionCode: Joi.string().trim().uppercase().pattern(/^[A-Z0-9-]+$/).optional(),
 }).unknown(false);
 
+const bookingRequestSchema = Joi.object({
+  roomId: Joi.string().allow("").optional(),
+  roomCode: Joi.string().trim().lowercase().max(120).allow("").optional(),
+  roomName: Joi.string().trim().min(2).max(180).required(),
+  checkInDate: dateSchema.required(),
+  checkOutDate: dateSchema.required(),
+  numGuests: Joi.number().integer().positive().required(),
+  guestFullName: Joi.string().trim().min(2).max(120).required(),
+  guestPhone: Joi.string().trim().min(6).max(40).required(),
+  guestArea: Joi.string().trim().min(2).max(180).required(),
+  guestEmail: Joi.string().trim().lowercase().email().allow("").optional(),
+  note: Joi.string().trim().max(1000).allow("").optional(),
+  comboSlug: Joi.string().trim().lowercase().pattern(/^[a-z0-9-]+$/).allow("").optional(),
+  comboName: Joi.string().trim().max(160).allow("").optional(),
+  estimatedTotal: Joi.number().min(0).optional(),
+  context: Joi.object({
+    landingPath: Joi.string().trim().max(300).allow("").optional(),
+    roomIsLive: Joi.boolean().optional(),
+    userAgent: Joi.string().trim().max(300).allow("").optional(),
+  }).default({}),
+}).unknown(false);
+
 const availabilityQuerySchema = Joi.object({
   roomId: Joi.string().required(),
   checkInDate: dateSchema.required(),
@@ -135,6 +158,12 @@ const listQuerySchema = Joi.object({
   guestEmail: Joi.string().trim().lowercase().allow("").default(""),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(50).default(10),
+}).unknown(false);
+
+const bookingRequestListQuerySchema = Joi.object({
+  status: Joi.string().valid("new", "contacted", "converted", "closed").allow("").default(""),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(50).default(20),
 }).unknown(false);
 
 const statusSchema = Joi.object({
@@ -335,6 +364,24 @@ async function generateUniqueBookingReference() {
   }
 
   throw new Error("Unable to generate unique booking reference");
+}
+
+function buildBookingRequestReferenceCandidate() {
+  const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+  return `BRQ-${dateCode}-${suffix}`;
+}
+
+async function generateUniqueBookingRequestReference() {
+  for (let index = 0; index < 5; index += 1) {
+    const reference = buildBookingRequestReferenceCandidate();
+    const exists = await BookingRequest.exists({ request_reference: reference });
+    if (!exists) {
+      return reference;
+    }
+  }
+
+  throw new Error("Unable to generate unique booking request reference");
 }
 
 function buildPriceSnapshot({
@@ -942,6 +989,39 @@ function serializeBookingResponse(booking) {
   };
 }
 
+function serializeBookingRequest(bookingRequest) {
+  return {
+    id: bookingRequest._id.toString(),
+    requestReference: bookingRequest.request_reference,
+    source: bookingRequest.source,
+    status: bookingRequest.status,
+    roomId: bookingRequest.room_id?.toString?.() || bookingRequest.room_id || null,
+    roomCode: bookingRequest.room_code,
+    roomName: bookingRequest.room_name,
+    checkInDate: bookingRequest.check_in_date,
+    checkOutDate: bookingRequest.check_out_date,
+    nights: bookingRequest.nights,
+    numGuests: bookingRequest.num_guests,
+    guestContact: {
+      fullName: bookingRequest.guest_full_name,
+      phone: bookingRequest.guest_phone,
+      area: bookingRequest.guest_area,
+      email: bookingRequest.guest_email,
+    },
+    note: bookingRequest.note,
+    combo: bookingRequest.combo_snapshot
+      ? serializeComboSnapshot(bookingRequest.combo_snapshot)
+      : {
+          slug: bookingRequest.combo_slug,
+          name: bookingRequest.combo_name || "Không chọn combo",
+        },
+    estimatedTotal: bookingRequest.estimated_total,
+    context: bookingRequest.context || {},
+    createdAt: bookingRequest.createdAt,
+    updatedAt: bookingRequest.updatedAt,
+  };
+}
+
 function serializeRelatedPayment(payment) {
   if (!payment) {
     return null;
@@ -1280,6 +1360,164 @@ router.get("/availability", publicRateLimit, async (req, res) => {
   }
 });
 
+// -- POST /booking-requests -----------------------------------------------------
+router.post("/booking-requests", publicRateLimit, async (req, res) => {
+  try {
+    const { error, value } = bookingRequestSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const stay = validateStayDates(value.checkInDate, value.checkOutDate);
+    if (stay.error) {
+      return res.status(400).json({ error: stay.error });
+    }
+
+    let room = null;
+    const hasRoomId = value.roomId && mongoose.Types.ObjectId.isValid(value.roomId);
+    if (value.roomId && !hasRoomId) {
+      return res.status(400).json({ error: "Invalid room id" });
+    }
+
+    if (hasRoomId) {
+      room = await loadBellaRoom(value.roomId, { includeInactive: true });
+      if (!room) {
+        return res.status(404).json({ error: "Bella room not found" });
+      }
+    }
+
+    let comboSnapshot = null;
+    if (value.comboSlug) {
+      const combo = await Combo.findOne({ slug: value.comboSlug }).lean();
+      if (combo) {
+        comboSnapshot = {
+          combo_id: combo._id,
+          slug: combo.slug,
+          name: combo.name,
+          price: Number(combo.base_price || 0),
+          price_type: combo.price_type,
+          included_services: combo.included_services || [],
+          duration_label: combo.duration_label,
+          suitable_for: combo.suitable_for,
+        };
+      }
+    }
+
+    const requestReference = await generateUniqueBookingRequestReference();
+    const bookingRequest = new BookingRequest({
+      request_reference: requestReference,
+      source: "landing_page",
+      room_id: room?._id || null,
+      room_code: value.roomCode || room?.code || null,
+      room_name: room?.localized_name?.vi || room?.room_type || value.roomName,
+      check_in_date: stay.checkIn,
+      check_out_date: stay.checkOut,
+      nights: stay.nights,
+      num_guests: value.numGuests,
+      guest_full_name: value.guestFullName,
+      guest_phone: value.guestPhone,
+      guest_area: value.guestArea,
+      guest_email: value.guestEmail || null,
+      note: value.note || "",
+      combo_slug: value.comboSlug || null,
+      combo_name: comboSnapshot?.name || value.comboName || "Không chọn combo",
+      combo_snapshot: comboSnapshot,
+      estimated_total: Number(value.estimatedTotal || 0),
+      context: {
+        ...value.context,
+        roomIsLive: value.context?.roomIsLive ?? Boolean(room?.is_available),
+        userAgent: String(req.get("user-agent") || value.context?.userAgent || "").slice(0, 300),
+      },
+    });
+
+    await bookingRequest.save();
+
+    const bookingRequestCreatedEvent = buildOutboxEvent({
+      topic: "booking-request-created",
+      eventKey: `${bookingRequest._id.toString()}:booking-request-created`,
+      aggregateType: "booking_request",
+      aggregateId: bookingRequest._id.toString(),
+      payload: {
+        id: bookingRequest._id.toString(),
+        requestReference,
+        roomId: bookingRequest.room_id?.toString?.() || null,
+        roomCode: bookingRequest.room_code,
+        roomName: bookingRequest.room_name,
+        checkInDate: bookingRequest.check_in_date,
+        checkOutDate: bookingRequest.check_out_date,
+        nights: bookingRequest.nights,
+        numGuests: bookingRequest.num_guests,
+        guestFullName: bookingRequest.guest_full_name,
+        guestPhone: bookingRequest.guest_phone,
+        guestArea: bookingRequest.guest_area,
+        guestEmail: bookingRequest.guest_email,
+        combo: serializeComboSnapshot(bookingRequest.combo_snapshot) || {
+          slug: bookingRequest.combo_slug,
+          name: bookingRequest.combo_name,
+        },
+        estimatedTotal: bookingRequest.estimated_total,
+        note: bookingRequest.note,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    await enqueueDomainEvents([bookingRequestCreatedEvent]);
+
+    await recordAuditLog({
+      action: "booking_request.created",
+      actor: req.user,
+      entityType: "booking_request",
+      entityId: bookingRequest._id.toString(),
+      metadata: {
+        requestReference,
+        roomCode: bookingRequest.room_code,
+        comboSlug: bookingRequest.combo_slug,
+      },
+    });
+
+    res.status(201).json({
+      message: "Booking request received",
+      bookingRequest: serializeBookingRequest(bookingRequest),
+    });
+  } catch (error) {
+    console.error("Create booking request error:", error);
+    res.status(500).json({ error: "Failed to create booking request" });
+  }
+});
+
+// -- GET /booking-requests ------------------------------------------------------
+router.get("/booking-requests", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    const { error, value } = bookingRequestListQuerySchema.validate(req.query);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const where = value.status ? { status: value.status } : {};
+    const [requests, total] = await Promise.all([
+      BookingRequest.find(where)
+        .sort({ createdAt: -1 })
+        .skip((value.page - 1) * value.limit)
+        .limit(value.limit)
+        .lean(),
+      BookingRequest.countDocuments(where),
+    ]);
+
+    res.json({
+      bookingRequests: requests.map(serializeBookingRequest),
+      pagination: {
+        page: value.page,
+        limit: value.limit,
+        total,
+        totalPages: Math.ceil(total / value.limit) || 1,
+      },
+    });
+  } catch (error) {
+    console.error("List booking requests error:", error);
+    res.status(500).json({ error: "Failed to fetch booking requests" });
+  }
+});
+
 // -- GET /lookup ----------------------------------------------------------------
 router.get("/lookup", publicRateLimit, async (req, res) => {
   try {
@@ -1480,6 +1718,8 @@ router.get("/admin/stats", authenticate, requireRole("admin"), async (req, res) 
       completedBookings,
       cancelledBookings,
       expiredBookings,
+      totalBookingRequests,
+      newBookingRequests,
       activePromotions,
       revenue,
     ] = await Promise.all([
@@ -1489,6 +1729,8 @@ router.get("/admin/stats", authenticate, requireRole("admin"), async (req, res) 
       Booking.countDocuments({ status: "completed" }),
       Booking.countDocuments({ status: "cancelled" }),
       Booking.countDocuments({ status: "expired" }),
+      BookingRequest.countDocuments({}),
+      BookingRequest.countDocuments({ status: "new" }),
       Promotion.countDocuments({ is_active: true }),
       Payment.aggregate([
         { $match: { $or: [{ status: "succeeded" }, { payment_status: "succeeded" }] } },
@@ -1517,6 +1759,10 @@ router.get("/admin/stats", authenticate, requireRole("admin"), async (req, res) 
       },
       promotions: {
         active: activePromotions,
+      },
+      bookingRequests: {
+        total: totalBookingRequests,
+        new: newBookingRequests,
       },
       revenue: {
         succeededPayments: revenue[0]?.totalRevenue || 0,

@@ -554,6 +554,31 @@ button:disabled {
   color: var(--ink-muted);
 }
 
+.password-input-shell {
+  padding-right: 0.5rem;
+}
+
+.password-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.password-toggle-button:hover,
+.password-toggle-button:focus-visible {
+  background: rgba(21, 94, 239, 0.08);
+  color: var(--ink);
+  outline: none;
+}
+
 .search-submit {
   align-self: end;
   min-height: 3.35rem;
@@ -1237,6 +1262,34 @@ button:disabled {
 .empty-state-stack p,
 .empty-state-stack span {
   margin: 0;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 0.2rem;
+}
+
+.nearby-room-list {
+  display: grid;
+  gap: 0.55rem;
+  width: min(100%, 34rem);
+  margin-top: 0.35rem;
+}
+
+.nearby-room-link {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(16, 37, 63, 0.14);
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.nearby-room-link:hover {
+  border-color: rgba(21, 94, 239, 0.28);
 }
 
 .empty-state-inline {
@@ -3635,6 +3688,19 @@ body {
   padding: 0.46rem 0.75rem;
   border-radius: 999px;
   background: rgba(16, 48, 60, 0.78);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.combo-card-selected-badge {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  display: inline-flex;
+  padding: 0.46rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(18, 112, 79, 0.9);
   color: #fff;
   font-size: 0.78rem;
   font-weight: 800;

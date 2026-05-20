@@ -4,12 +4,9 @@ import {
   ArrowLeft,
   BedDouble,
   Calendar,
-  CheckCircle2,
-  CreditCard,
   Gift,
   DoorOpen,
   Droplets,
-  Landmark,
   MapPin,
   ShieldCheck,
   Sparkles,
@@ -21,17 +18,15 @@ import BookingSummary from "../components/BookingSummary";
 import ComboCard from "../components/ComboCard";
 import LoadingGrid from "../components/LoadingGrid";
 import PriceBreakdown from "../components/PriceBreakdown";
-import PromotionCodeInput from "../components/PromotionCodeInput";
 import RoomHighlights from "../components/RoomHighlights";
 import RoomPriceBlock from "../components/RoomPriceBlock";
 import { useAuth } from "../context/auth-context";
 import { bellaContent } from "../content/bellaContent";
 import { useBellaHotelData } from "../hooks/useBellaHotelData";
 import { useCombos } from "../hooks/useCombos";
-import { bookingApi, paymentApi } from "../services/api";
+import { bookingApi } from "../services/api";
 import {
   formatAccessModeLabel,
-  formatBookingStatusLabel,
   formatCurrency,
   formatDateRange,
   formatGuestLabel,
@@ -54,43 +49,76 @@ function scrollToSection(sectionId) {
   document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function formatCountdown(targetDate, nowDate = new Date()) {
-  if (!targetDate) return "";
-  const remainingMs = new Date(targetDate).getTime() - nowDate.getTime();
-  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "00:00";
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
+const leadDraftTtlMs = 7 * 24 * 60 * 60 * 1000;
+
+function getLeadDraftKey(roomCode) {
+  return `bella_landing_lead_draft_${roomCode || "unknown"}`;
+}
+
+function readLeadDraft(roomCode) {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const draftKey = getLeadDraftKey(roomCode);
+    const rawDraft = window.sessionStorage.getItem(draftKey);
+    if (!rawDraft) return {};
+
+    const parsed = JSON.parse(rawDraft);
+    if (parsed.expiresAt && parsed.expiresAt < Date.now()) {
+      window.sessionStorage.removeItem(draftKey);
+      window.sessionStorage.setItem(`${draftKey}:expired`, "1");
+      return { expired: true };
+    }
+
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function consumeLeadDraftExpired(roomCode) {
+  if (typeof window === "undefined") return false;
+  const expiredKey = `${getLeadDraftKey(roomCode)}:expired`;
+  const expired = window.sessionStorage.getItem(expiredKey) === "1";
+  window.sessionStorage.removeItem(expiredKey);
+  return expired;
+}
+
+function buildInitialBookingData(roomCode) {
+  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const draft = readLeadDraft(roomCode);
+  const guestsFromQuery = Number(params.get("guests") || draft.numGuests || 1);
+
+  return {
+    checkInDate: params.get("checkIn") || draft.checkInDate || "",
+    checkOutDate: params.get("checkOut") || draft.checkOutDate || "",
+    numGuests: Number.isFinite(guestsFromQuery) && guestsFromQuery > 0 ? guestsFromQuery : 1,
+    guestFullName: draft.guestFullName || "",
+    guestEmail: draft.guestEmail || "",
+    guestPhone: draft.guestPhone || "",
+    guestArea: draft.guestArea || "",
+    specialRequests: draft.specialRequests || "",
+  };
 }
 
 export default function RoomDetailPage() {
   const { code } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const { hotel, roomCatalog, loading, loadError } = useBellaHotelData();
 
-  const [bookingData, setBookingData] = useState({
-    checkInDate: "",
-    checkOutDate: "",
-    numGuests: 1,
-    guestFullName: "",
-    guestEmail: "",
-    guestPhone: "",
-    specialRequests: "",
-    promotionCode: "",
-  });
+  const [bookingData, setBookingData] = useState(() => buildInitialBookingData(code));
   const [bookingResult, setBookingResult] = useState(null);
-  const [checkoutSession, setCheckoutSession] = useState(null);
-  const [checkoutError, setCheckoutError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availabilityResult, setAvailabilityResult] = useState(null);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
-  const [selectedComboSlug, setSelectedComboSlug] = useState("");
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
-  const [statusChecking, setStatusChecking] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+  const [selectedComboSlug, setSelectedComboSlug] = useState(() => {
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    const draft = readLeadDraft(code);
+    return params.get("combo") || draft.selectedComboSlug || "";
+  });
+  const [draftExpired] = useState(() => consumeLeadDraftExpired(code));
 
   const room = useMemo(
     () => roomCatalog.find((item) => item.code === code) || null,
@@ -100,6 +128,12 @@ export default function RoomDetailPage() {
     if (!room) return;
     document.title = `${room.displayName} | Bella Hotel Phú Quốc`;
   }, [room]);
+
+  useEffect(() => {
+    if (draftExpired) {
+      toast("Thông tin giữ chỗ nháp đã hết hạn. Bạn vui lòng kiểm tra lại ngày ở và thông tin liên hệ.");
+    }
+  }, [draftExpired]);
 
   useEffect(() => {
     const defaultFullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
@@ -127,10 +161,54 @@ export default function RoomDetailPage() {
   }, [loading, location.hash]);
 
   useEffect(() => {
-    if (!bookingResult?.paymentExpiresAt) return undefined;
-    const timerId = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timerId);
-  }, [bookingResult?.paymentExpiresAt]);
+    if (typeof window === "undefined") return;
+
+    window.sessionStorage.setItem(
+      getLeadDraftKey(code),
+      JSON.stringify({
+        ...bookingData,
+        selectedComboSlug,
+        expiresAt: Date.now() + leadDraftTtlMs,
+      }),
+    );
+  }, [bookingData, code, selectedComboSlug]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(location.search);
+
+    if (bookingData.checkInDate) nextParams.set("checkIn", bookingData.checkInDate);
+    else nextParams.delete("checkIn");
+
+    if (bookingData.checkOutDate) nextParams.set("checkOut", bookingData.checkOutDate);
+    else nextParams.delete("checkOut");
+
+    if (bookingData.numGuests) nextParams.set("guests", String(bookingData.numGuests));
+    else nextParams.delete("guests");
+
+    if (selectedComboSlug) nextParams.set("combo", selectedComboSlug);
+    else nextParams.delete("combo");
+
+    const nextSearch = nextParams.toString() ? `?${nextParams.toString()}` : "";
+    if (nextSearch !== location.search) {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch,
+          hash: location.hash,
+        },
+        { replace: true },
+      );
+    }
+  }, [
+    bookingData.checkInDate,
+    bookingData.checkOutDate,
+    bookingData.numGuests,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    selectedComboSlug,
+  ]);
 
   const nights = useMemo(() => {
     if (!bookingData.checkInDate || !bookingData.checkOutDate) return 0;
@@ -186,55 +264,63 @@ export default function RoomDetailPage() {
       : "";
   }, [room]);
 
-  const reservationStage = bookingResult?.status === "confirmed" ? "paid" : bookingResult ? "reserved" : "planning";
-  const appliedPromotion = bookingResult?.promotion || availabilityResult?.promotion || null;
+  const reservationStage = bookingResult ? "received" : "planning";
+  const appliedPromotion = availabilityResult?.promotion || null;
   const selectedCombo = useMemo(
     () => availableCombos.find((combo) => combo.slug === selectedComboSlug) || null,
     [availableCombos, selectedComboSlug],
   );
-  const appliedCombo = bookingResult?.combo || availabilityResult?.combo || selectedCombo;
-  const serverEstimatedTotal = bookingResult?.totalPrice || availabilityResult?.totalPrice || estimatedTotal;
-  const activePriceBreakdown = bookingResult?.priceSnapshot?.breakdown || availabilityResult?.priceBreakdown || null;
-  const canSubmitBooking =
-    room?.isLive &&
-    !isSubmitting &&
-    !authLoading &&
-    !bookingResult &&
-    (!availabilityResult || availabilityResult.available !== false);
-  const holdCountdown = bookingResult?.paymentExpiresAt
-    ? formatCountdown(bookingResult.paymentExpiresAt, now)
-    : "";
+  const hasSelectedCombo = Boolean(selectedComboSlug && selectedCombo);
+  const appliedCombo = hasSelectedCombo ? selectedCombo : null;
+  const serverEstimatedTotal = availabilityResult?.totalPrice || estimatedTotal;
+  const activePriceBreakdown = availabilityResult?.priceBreakdown || null;
+  const canSubmitBooking = !isSubmitting && !bookingResult;
+
+  useEffect(() => {
+    if (!selectedComboSlug || combosLoading) return;
+    if (!selectedCombo && (availableCombos.length > 0 || nights > 0)) {
+      setSelectedComboSlug("");
+      setAvailabilityResult(null);
+      toast("Combo đã chọn không còn phù hợp với ngày ở hoặc số khách hiện tại.");
+    }
+  }, [availableCombos.length, combosLoading, nights, selectedCombo, selectedComboSlug]);
 
   const reservationSteps = [
     {
-      id: "planning",
-      label: "1. Chọn ngày và combo",
-      helper: "Kiểm tra ngày lưu trú, sức chứa, combo và giá hiện tại.",
+      id: "stay",
+      label: "1. Chọn ngày lưu trú và số khách",
+      helper: "Bella dùng thông tin này để tư vấn phòng phù hợp.",
     },
     {
-      id: "reserved",
-      label: "2. Giữ chỗ",
-      helper: "Bella tạo mã đặt phòng và khóa thông tin cho bạn.",
+      id: "room",
+      label: "2. Chọn hạng phòng / xem chi tiết phòng",
+      helper: "Bạn đang xem hạng phòng quan tâm trước khi để lại thông tin.",
     },
     {
-      id: "paid",
-      label: "3. Xác nhận",
-      helper: "Bella chỉ xác nhận sau khi cổng thanh toán gửi kết quả đã được backend kiểm chứng.",
+      id: "combo",
+      label: "3. Chọn combo hoặc không chọn combo",
+      helper: "Combo là lựa chọn bổ sung, không bắt buộc.",
+    },
+    {
+      id: "contact",
+      label: "4. Để lại thông tin giữ chỗ",
+      helper: "Nhân viên Bella sẽ liên hệ lại để xác nhận phòng.",
     },
   ];
 
   const handleBookingChange = (event) => {
     const { name, value } = event.target;
     setBookingData((prev) => ({ ...prev, [name]: value }));
+    if (["checkInDate", "checkOutDate", "numGuests"].includes(name)) {
+      setAvailabilityResult(null);
+    }
   };
 
   const handleCreateBooking = async (event) => {
     event.preventDefault();
 
-    if (authLoading) return;
-
     if (bookingFeedback) {
-      toast.error("Bella chưa thể giữ chỗ với thông tin ngày ở hiện tại.");
+      toast.error("Bella chưa thể nhận yêu cầu với thông tin ngày ở hiện tại.");
       return;
     }
 
@@ -243,38 +329,43 @@ export default function RoomDetailPage() {
       return;
     }
 
-    if (!user?.id) {
-      toast.error("Vui lòng đăng nhập để giữ chỗ hạng phòng này.");
-      navigate("/login", { state: { redirectTo: `/rooms/${code}#book` } });
+    if (!bookingData.guestFullName.trim() || !bookingData.guestPhone.trim() || !bookingData.guestArea.trim()) {
+      toast.error("Vui lòng nhập họ tên, số điện thoại và khu vực đang ở.");
       return;
     }
 
-    if (!room?.id || !room?.isLive) {
-      toast.error("Hạng phòng này hiện chưa sẵn sàng để đặt trực tuyến.");
+    if (!room?.id) {
+      toast.error("Bella chưa nhận diện được hạng phòng bạn đang quan tâm.");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const response = await bookingApi.post("/bookings", {
+      const response = await bookingApi.post("/booking-requests", {
         roomId: room.id,
+        roomCode: room.code,
+        roomName: room.displayName,
         checkInDate: bookingData.checkInDate,
         checkOutDate: bookingData.checkOutDate,
         numGuests: Number(bookingData.numGuests || 1),
-        guestFullName: bookingData.guestFullName,
-        guestEmail: bookingData.guestEmail,
-        guestPhone: bookingData.guestPhone || undefined,
-        specialRequests: bookingData.specialRequests || undefined,
-        comboSlug: selectedComboSlug || undefined,
-        promotionCode: bookingData.promotionCode.trim().toUpperCase() || undefined,
+        guestFullName: bookingData.guestFullName.trim(),
+        guestEmail: bookingData.guestEmail.trim() || undefined,
+        guestPhone: bookingData.guestPhone.trim(),
+        guestArea: bookingData.guestArea.trim(),
+        note: bookingData.specialRequests.trim() || undefined,
+        comboSlug: selectedCombo?.slug || undefined,
+        comboName: selectedCombo?.name || "Không chọn combo",
+        estimatedTotal: serverEstimatedTotal || 0,
+        context: {
+          landingPath: `${location.pathname}${location.search}${location.hash}`,
+          roomIsLive: Boolean(room.isLive),
+        },
       });
-      setBookingResult(response.data.booking);
-      setCheckoutSession(null);
-      setCheckoutError("");
-      toast.success("Bella đã tạo mã đặt phòng. Bạn có thể chuyển sang cổng thanh toán sandbox.");
+      setBookingResult(response.data.bookingRequest);
+      toast.success("Bella đã nhận thông tin giữ chỗ.");
       scrollToSection("book");
     } catch (error) {
-      toast.error(error.response?.data?.error || "Không thể tạo đơn đặt phòng.");
+      toast.error(error.response?.data?.error || "Không thể gửi yêu cầu giữ chỗ.");
     } finally {
       setIsSubmitting(false);
     }
@@ -295,7 +386,6 @@ export default function RoomDetailPage() {
           checkOutDate: bookingData.checkOutDate,
           numGuests: Number(bookingData.numGuests || 1),
           comboSlug: selectedComboSlug || undefined,
-          promotionCode: bookingData.promotionCode.trim().toUpperCase() || undefined,
         },
       });
       setAvailabilityResult(response.data);
@@ -309,66 +399,6 @@ export default function RoomDetailPage() {
       toast.error(error.response?.data?.error || "Không thể kiểm tra tình trạng phòng.");
     } finally {
       setIsCheckingAvailability(false);
-    }
-  };
-
-  const handleStartCheckout = async (paymentMethodType = "hosted_checkout") => {
-    if (!bookingResult?.id) return;
-
-    try {
-      setIsSubmitting(true);
-      setSelectedPaymentMethod(paymentMethodType);
-      setCheckoutError("");
-      const response = await paymentApi.post("/payments/checkout-sessions", {
-        bookingId: bookingResult.id,
-        paymentMethodType,
-        billingName: bookingData.guestFullName || undefined,
-        billingEmail: bookingData.guestEmail || undefined,
-      });
-      const nextCheckoutSession = response.data.checkoutSession;
-      setCheckoutSession(nextCheckoutSession);
-      if (nextCheckoutSession.checkoutUrl) {
-        window.location.assign(nextCheckoutSession.checkoutUrl);
-      } else if (nextCheckoutSession.qrCode) {
-        toast.success("Bella đã tạo mã QR ngân hàng. Hãy quét mã để thanh toán.");
-      }
-    } catch (error) {
-      const nextCheckoutError =
-        error.response?.data?.error || "Không thể khởi tạo cổng thanh toán.";
-      setCheckoutError(nextCheckoutError);
-      toast.error(nextCheckoutError);
-    } finally {
-      setIsSubmitting(false);
-      setSelectedPaymentMethod("");
-    }
-  };
-
-  const handleCheckPaymentStatus = async () => {
-    if (!checkoutSession?.sessionId) return;
-
-    try {
-      setStatusChecking(true);
-      const response = await paymentApi.get(`/payments/checkout-sessions/${checkoutSession.sessionId}/status`);
-      const nextBooking = response.data.booking;
-      const nextPayment = response.data.payment;
-      if (nextBooking) {
-        setBookingResult((previous) => ({
-          ...(previous || {}),
-          ...nextBooking,
-          bookingReference: nextBooking.bookingReference || previous?.bookingReference,
-          totalPrice: nextBooking.totalPrice || previous?.totalPrice,
-        }));
-      }
-
-      if (nextPayment?.paymentStatus === "succeeded") {
-        toast.success("Bella đã xác nhận thanh toán thành công.");
-      } else {
-        toast("Bella vẫn đang chờ ngân hàng xác nhận giao dịch.");
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.error || "Chưa thể kiểm tra trạng thái thanh toán.");
-    } finally {
-      setStatusChecking(false);
     }
   };
 
@@ -407,7 +437,7 @@ export default function RoomDetailPage() {
       <div className="shell-container section-stack">
         <div className="room-detail-page">
           <div className="room-detail-breadcrumbs">
-            <Link to="/rooms" className="text-link room-back-link" data-testid="back-to-rooms">
+            <Link to={`/rooms${location.search}`} className="text-link room-back-link" data-testid="back-to-rooms">
               <ArrowLeft size={16} />
               Quay lại danh sách hạng phòng
             </Link>
@@ -622,30 +652,19 @@ export default function RoomDetailPage() {
                   </div>
                   <span
                     className={
-                      reservationStage === "paid"
+                      reservationStage === "received"
                         ? "status-pill status-pill-confirmed"
-                        : reservationStage === "reserved"
-                          ? "status-pill status-pill-pending"
-                          : "status-pill"
+                        : "status-pill"
                     }
                   >
-                    {reservationStage === "paid"
-                      ? "Đã xác nhận"
-                      : reservationStage === "reserved"
-                        ? "Đã giữ chỗ"
-                        : "Bắt đầu đặt phòng"}
+                    {reservationStage === "received" ? "Đã gửi yêu cầu" : "Để lại thông tin"}
                   </span>
                 </div>
 
                 <div className="reservation-steps" aria-label="Quy trình đặt phòng">
                   {reservationSteps.map((step) => {
-                    const isCurrent =
-                      (step.id === "planning" && reservationStage === "planning") ||
-                      (step.id === "reserved" && reservationStage === "reserved") ||
-                      (step.id === "paid" && reservationStage === "paid");
-                    const isComplete =
-                      (step.id === "planning" && reservationStage !== "planning") ||
-                      (step.id === "reserved" && reservationStage === "paid");
+                    const isCurrent = reservationStage === "planning" && step.id === "contact";
+                    const isComplete = reservationStage === "received";
 
                     return (
                       <div
@@ -665,29 +684,6 @@ export default function RoomDetailPage() {
                   })}
                 </div>
 
-                <div className="booking-room-summary">
-                  <img
-                    src={room.images?.[0] || bellaContent.gallery[0].src}
-                    alt={room.displayName}
-                    className="booking-room-image"
-                  />
-                  <div>
-                    <h3>{room.displayName}</h3>
-                    <p>
-                      {[
-                        room.areaSqm ? `${room.areaSqm} m2` : null,
-                        getReadableBedSummary(room.bedConfigs),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                    <RoomHighlights
-                      items={getRoomHighlights(room, 4)}
-                      className="room-chip-row-tight"
-                    />
-                  </div>
-                </div>
-
                 <BookingSummary
                   checkInDate={bookingData.checkInDate}
                   checkOutDate={bookingData.checkOutDate}
@@ -697,24 +693,21 @@ export default function RoomDetailPage() {
                 />
 
                 {!room.isLive ? (
-                  <div className="empty-state empty-state-inline">
+                  <div className="booking-note-card booking-note-card-soft">
                     <div className="empty-state-stack">
                       <p>Hạng phòng này hiện chưa mở đặt trực tuyến.</p>
                       <span>
-                        Bạn vẫn có thể xem đầy đủ thông tin phòng và quay lại danh sách để chọn
-                        hạng phòng khác đang sẵn sàng nhận đặt.
+                        Bạn vẫn có thể để lại thông tin tư vấn. Bella sẽ gọi lại để kiểm tra phòng,
+                        ngày ở và phương án giữ chỗ thủ công phù hợp.
                       </span>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        onClick={() => scrollToSection("book")}
+                      >
+                        Để lại thông tin tư vấn
+                      </button>
                     </div>
-                  </div>
-                ) : null}
-
-                {!user?.id ? (
-                  <div className="booking-note-card booking-note-card-soft">
-                    <strong>Chưa đăng nhập?</strong>
-                    <p>
-                      Bạn vẫn có thể chọn ngày ở và xem tổng tiền trước. Bella sẽ đưa bạn về đúng
-                      bước giữ chỗ sau khi đăng nhập.
-                    </p>
                   </div>
                 ) : null}
 
@@ -778,6 +771,37 @@ export default function RoomDetailPage() {
                     </label>
                   </div>
 
+                  <div className="booking-form-section">
+                    <div className="booking-form-section-head">
+                      <p className="eyebrow">Bước 2</p>
+                      <h3>Chọn hạng phòng / xem chi tiết phòng</h3>
+                      <p>Hạng phòng này sẽ được gửi kèm yêu cầu để nhân viên biết bạn đang quan tâm lựa chọn nào.</p>
+                    </div>
+
+                    <div className="booking-room-summary">
+                      <img
+                        src={room.images?.[0] || bellaContent.gallery[0].src}
+                        alt={room.displayName}
+                        className="booking-room-image"
+                      />
+                      <div>
+                        <h3>{room.displayName}</h3>
+                        <p>
+                          {[
+                            room.areaSqm ? `${room.areaSqm} m2` : null,
+                            getReadableBedSummary(room.bedConfigs),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        <RoomHighlights
+                          items={getRoomHighlights(room, 4)}
+                          className="room-chip-row-tight"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="booking-form-section combo-picker-section">
                     <div className="booking-form-section-head">
                       <p className="eyebrow">Bước 3</p>
@@ -790,7 +814,7 @@ export default function RoomDetailPage() {
 
                     <button
                       type="button"
-                      className={selectedComboSlug ? "combo-none-option" : "combo-none-option combo-none-option-active"}
+                      className={hasSelectedCombo ? "combo-none-option" : "combo-none-option combo-none-option-active"}
                       onClick={() => {
                         setSelectedComboSlug("");
                         setAvailabilityResult(null);
@@ -815,6 +839,10 @@ export default function RoomDetailPage() {
                             selected={selectedComboSlug === combo.slug}
                             onSelect={(nextCombo) => {
                               setSelectedComboSlug(nextCombo.slug);
+                              setAvailabilityResult(null);
+                            }}
+                            onDeselect={() => {
+                              setSelectedComboSlug("");
                               setAvailabilityResult(null);
                             }}
                           />
@@ -881,7 +909,7 @@ export default function RoomDetailPage() {
                   ) : (
                     <p className="field-note">
                       Bella sẽ kiểm tra lại phòng trống, sức chứa và tổng tiền cuối cùng trước khi
-                      tạo mã đặt phòng.
+                      nhân viên liên hệ xác nhận.
                     </p>
                   )}
 
@@ -913,7 +941,7 @@ export default function RoomDetailPage() {
                         </strong>
                       </div>
                       <div className="booking-confirmation-row">
-                        <span>Tổng tiền hệ thống tạm giữ</span>
+                        <span>Tạm tính hệ thống</span>
                         <strong>{formatCurrency(availabilityResult.totalPrice)}</strong>
                       </div>
                       {availabilityResult.promotion ? (
@@ -929,11 +957,11 @@ export default function RoomDetailPage() {
 
                   <div className="booking-form-section">
                     <div className="booking-form-section-head">
-                      <p className="eyebrow">Bước 2</p>
-                      <h3>Thông tin khách lưu trú</h3>
+                      <p className="eyebrow">Bước 4</p>
+                      <h3>Để lại thông tin giữ chỗ</h3>
                       <p>
-                        Thông tin này sẽ được gắn với mã đặt phòng và dùng cho bước liên hệ cần
-                        thiết.
+                        Bella dùng thông tin này để gọi lại hoặc nhắn tin xác nhận phòng, chưa tạo
+                        thanh toán và chưa đánh dấu đặt phòng thành công.
                       </p>
                     </div>
 
@@ -953,21 +981,6 @@ export default function RoomDetailPage() {
 
                     <div className="form-grid">
                       <label className="form-field">
-                        <span>Email</span>
-                        <input
-                          type="email"
-                          name="guestEmail"
-                          className="text-input"
-                          value={bookingData.guestEmail}
-                          onChange={handleBookingChange}
-                          data-testid="booking-email"
-                          autoComplete="email"
-                          placeholder="tenban@example.com"
-                          required
-                        />
-                      </label>
-
-                      <label className="form-field">
                         <span>Số điện thoại</span>
                         <input
                           name="guestPhone"
@@ -977,6 +990,37 @@ export default function RoomDetailPage() {
                           data-testid="booking-phone"
                           autoComplete="tel"
                           placeholder="+84 000 000 000"
+                          required
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>Địa chỉ hoặc khu vực đang ở</span>
+                        <input
+                          name="guestArea"
+                          className="text-input"
+                          value={bookingData.guestArea}
+                          onChange={handleBookingChange}
+                          data-testid="booking-area"
+                          autoComplete="address-level2"
+                          placeholder="Ví dụ: TP.HCM, Hà Nội, An Thới..."
+                          required
+                        />
+                      </label>
+                    </div>
+
+                    <div className="form-grid">
+                      <label className="form-field">
+                        <span>Email (không bắt buộc)</span>
+                        <input
+                          type="email"
+                          name="guestEmail"
+                          className="text-input"
+                          value={bookingData.guestEmail}
+                          onChange={handleBookingChange}
+                          data-testid="booking-email"
+                          autoComplete="email"
+                          placeholder="tenban@example.com"
                         />
                       </label>
                     </div>
@@ -984,20 +1028,10 @@ export default function RoomDetailPage() {
 
                   <div className="booking-form-section">
                     <div className="booking-form-section-head">
-                      <p className="eyebrow">Bước 4</p>
-                      <h3>Ghi chú thêm trước khi giữ chỗ</h3>
-                      <p>
-                        Mã khuyến mãi và yêu cầu đặc biệt được lưu cùng đơn đặt phòng để Bella xử lý
-                        nhất quán hơn.
-                      </p>
+                      <p className="eyebrow">Ghi chú</p>
+                      <h3>Thông tin nhân viên cần biết thêm</h3>
+                      <p>Ghi chú này sẽ đi cùng yêu cầu tư vấn để Bella chuẩn bị trước khi liên hệ.</p>
                     </div>
-
-                    <PromotionCodeInput
-                      value={bookingData.promotionCode}
-                      onChange={handleBookingChange}
-                      onValidate={handleCheckAvailability}
-                      loading={isCheckingAvailability}
-                    />
 
                     <label className="form-field">
                       <span>Yêu cầu thêm</span>
@@ -1015,9 +1049,9 @@ export default function RoomDetailPage() {
                   <div className="booking-note-card">
                     <strong>Sau khi bấm giữ chỗ</strong>
                     <p>
-                      Bella sẽ tạo mã đặt phòng ở trạng thái chờ thanh toán. Bước tiếp theo là
-                      chuyển bạn sang hosted checkout sandbox, nơi Bella không tự thu thập thông
-                      tin thẻ thô.
+                      Bella chỉ ghi nhận yêu cầu giữ chỗ / tư vấn và chuyển thông tin cho nhân
+                      viên liên hệ xác nhận. Trang này không tạo payment link và không đánh dấu
+                      đặt phòng là đã thanh toán.
                     </p>
                   </div>
 
@@ -1028,10 +1062,10 @@ export default function RoomDetailPage() {
                     data-testid="submit-booking"
                   >
                     {bookingResult
-                      ? "Đã tạo mã đặt phòng"
-                      : user?.id
-                        ? "Giữ chỗ hạng phòng này"
-                        : "Đăng nhập để giữ chỗ"}
+                      ? "Đã gửi yêu cầu"
+                      : room.isLive
+                        ? "Giữ chỗ"
+                        : "Yêu cầu nhân viên liên hệ"}
                   </button>
                 </form>
 
@@ -1041,29 +1075,27 @@ export default function RoomDetailPage() {
                     data-testid="booking-result"
                   >
                     <div className="booking-confirmation-row">
-                      <span>Mã đặt phòng</span>
-                      <strong>{bookingResult.bookingReference}</strong>
+                      <span>Kết quả</span>
+                      <strong>Bella đã nhận thông tin giữ chỗ</strong>
                     </div>
                     <div className="booking-confirmation-row">
-                      <span>Trạng thái hiện tại</span>
-                      <strong>{formatBookingStatusLabel(bookingResult.status || "pending_payment")}</strong>
+                      <span>Mã yêu cầu</span>
+                      <strong>{bookingResult.requestReference}</strong>
                     </div>
                     <div className="booking-confirmation-row">
-                      <span>Tổng tiền hệ thống</span>
-                      <strong>{formatCurrency(bookingResult.totalPrice)}</strong>
+                      <span>Trạng thái</span>
+                      <strong>Nhân viên sẽ liên hệ xác nhận trong thời gian sớm nhất</strong>
                     </div>
                     <div className="booking-confirmation-row">
-                      <span>Số đêm lưu trú</span>
-                      <strong>{bookingResult.nights} đêm</strong>
+                      <span>Hạng phòng quan tâm</span>
+                      <strong>{bookingResult.roomName || room.displayName}</strong>
                     </div>
-                    {bookingResult.promotion ? (
-                      <div className="booking-confirmation-row">
-                        <span>Mã ưu đãi</span>
-                        <strong>
-                          {bookingResult.promotion.code} (-{formatCurrency(bookingResult.promotion.discountAmount)})
-                        </strong>
-                      </div>
-                    ) : null}
+                    <div className="booking-confirmation-row">
+                      <span>Thời gian lưu trú</span>
+                      <strong>
+                        {formatDateRange(bookingData.checkInDate, bookingData.checkOutDate)} · {nights} đêm
+                      </strong>
+                    </div>
                     {bookingResult.combo ? (
                       <div className="booking-confirmation-row">
                         <span>Combo</span>
@@ -1073,156 +1105,6 @@ export default function RoomDetailPage() {
                   </div>
                 ) : null}
               </div>
-
-              {bookingResult ? (
-                <div className="panel payment-panel">
-                  <div className="payment-panel-header">
-                    <div>
-                      <p className="eyebrow">Thanh toán</p>
-                      <h2 className="panel-title">Chuyển sang hosted checkout</h2>
-                      <p className="section-copy section-copy-tight">
-                        Bella đã giữ chỗ cho bạn ở trạng thái chờ thanh toán. Booking chỉ được xác
-                        nhận sau khi backend nhận kết quả đã xác thực từ cổng thanh toán.
-                      </p>
-                    </div>
-                    <span
-                      className={
-                        bookingResult.status === "confirmed"
-                          ? "status-pill status-pill-confirmed"
-                          : "status-pill status-pill-pending"
-                      }
-                    >
-                      <CheckCircle2 size={14} />
-                      {bookingResult.status === "confirmed" ? "Đã xác nhận" : "Chờ thanh toán"}
-                    </span>
-                  </div>
-
-                  <div className="booking-note-card booking-note-card-soft">
-                    <strong>Tổng cần thanh toán</strong>
-                    <p>{formatCurrency(bookingResult.totalPrice)}</p>
-                  </div>
-
-                  <div className="booking-confirmation-card">
-                    <div className="booking-confirmation-row">
-                      <span>Khách sạn / hạng phòng</span>
-                      <strong>{hotel?.name || bellaContent.property.name} · {room.displayName}</strong>
-                    </div>
-                    <div className="booking-confirmation-row">
-                      <span>Thời gian lưu trú</span>
-                      <strong>
-                        {formatDateRange(bookingData.checkInDate, bookingData.checkOutDate)} · {nights} đêm
-                      </strong>
-                    </div>
-                    <div className="booking-confirmation-row">
-                      <span>Giữ chỗ còn lại</span>
-                      <strong>{holdCountdown || "Đang cập nhật"}</strong>
-                    </div>
-                  </div>
-
-                  <div className="form-stack" data-testid="payment-panel">
-                    <div className="booking-note-card booking-note-card-soft">
-                      <strong>Bella không lưu dữ liệu thẻ</strong>
-                      <p>
-                        Website này chỉ tạo checkout session và chuyển bạn sang sandbox hosted
-                        checkout. Toan bộ xác nhận thanh toán được quyết định phía server sau khi có
-                        callback/webhook hợp lệ.
-                      </p>
-                    </div>
-
-                    <div className="booking-note-card booking-note-card-soft">
-                      <strong>Kịch bản sandbox</strong>
-                      <p>
-                        Bạn có thể bắt đầu bằng thanh toán thẻ hoặc chuyển khoản ngân hàng sandbox.
-                        Trang provider mô phỏng vẫn cho phép thử thành công, thất bại, hủy hoặc
-                        hết hạn phiên để kiểm tra luồng nghiệp vụ.
-                      </p>
-                    </div>
-
-                    {bookingResult.paymentExpiresAt ? (
-                      <p className="field-note">
-                        Bella đang giữ chỗ đến khoảng{" "}
-                        {new Date(bookingResult.paymentExpiresAt).toLocaleString("vi-VN")}. Thời gian còn lại:{" "}
-                        <strong>{holdCountdown}</strong>.
-                      </p>
-                    ) : null}
-
-                    {checkoutError ? (
-                      <p className="field-error" data-testid="payment-error">
-                        {checkoutError}
-                      </p>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      className="button button-primary button-block"
-                      onClick={() => handleStartCheckout("card")}
-                      disabled={isSubmitting || bookingResult.status === "confirmed"}
-                      data-testid="start-card-checkout"
-                    >
-                      <CreditCard size={16} />
-                      {bookingResult.status === "confirmed"
-                        ? "Đặt phòng đã được xác nhận"
-                        : selectedPaymentMethod === "card"
-                          ? "Đang tạo phiên thanh toán thẻ..."
-                          : `Thanh toán thẻ ${formatCurrency(bookingResult.totalPrice)}`}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="button button-secondary button-block"
-                      onClick={() => handleStartCheckout("bank_transfer")}
-                      disabled={isSubmitting || bookingResult.status === "confirmed"}
-                      data-testid="start-bank-checkout"
-                    >
-                      <Landmark size={16} />
-                      {selectedPaymentMethod === "bank_transfer"
-                        ? "Đang tạo phiên quét QR..."
-                        : "Quét QR ngân hàng"}
-                    </button>
-
-                    {checkoutSession?.checkoutUrl ? (
-                      <Link
-                        to="/bookings"
-                        className="button button-secondary button-block"
-                        data-testid="view-bookings-after-payment"
-                      >
-                        Theo dõi trạng thái trên trang đặt phòng
-                      </Link>
-                    ) : (
-                      <Link to="/lookup" className="button button-ghost button-block">
-                        Tra cứu bằng mã đặt phòng
-                      </Link>
-                    )}
-
-                    {checkoutSession?.qrCode && !checkoutSession?.checkoutUrl ? (
-                      <div className="booking-note-card booking-note-card-soft">
-                        <strong>Quét QR ngân hàng</strong>
-                        <p>Mở app ngân hàng và quét mã QR để thanh toán. Sau khi chuyển khoản, bấm kiểm tra trạng thái để Bella đọc kết quả từ backend.</p>
-                        {String(checkoutSession.qrCode).startsWith("http") ||
-                        String(checkoutSession.qrCode).startsWith("data:image") ? (
-                          <img
-                            src={checkoutSession.qrCode}
-                            alt="Mã QR thanh toán ngân hàng Bella"
-                            className="payment-qr-image"
-                          />
-                        ) : (
-                          <code className="payment-qr-code">{checkoutSession.qrCode}</code>
-                        )}
-                        {checkoutSession.sessionId ? (
-                          <button
-                            type="button"
-                            className="button button-primary button-block payment-status-check-button"
-                            onClick={handleCheckPaymentStatus}
-                            disabled={statusChecking}
-                          >
-                            {statusChecking ? "Đang kiểm tra..." : "Tôi đã thanh toán, kiểm tra trạng thái"}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
 
               <div className="panel panel-soft room-stay-note">
                 <div className="room-stay-note-row">

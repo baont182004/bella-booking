@@ -3,6 +3,7 @@ import {
   sendBookingConfirmation,
   sendPaymentConfirmation,
   sendBookingCancellation,
+  sendBookingRequestNotification,
 } from "../services/email.service.js";
 
 let kafka;
@@ -72,6 +73,10 @@ async function handleNotificationRequest(notification) {
         });
         break;
 
+      case "booking-request-created":
+        await sendBookingRequestNotification(data);
+        break;
+
       default:
         console.log(`Unknown notification type: ${type}`);
     }
@@ -89,6 +94,7 @@ async function startConsumer() {
       topics: [
         "notification-request",
         "booking-created",
+        "booking-request-created",
         "payment-processed",
         "booking-cancelled",
       ],
@@ -107,6 +113,11 @@ async function startConsumer() {
           } else if (topic === "booking-created") {
             await handleNotificationRequest({
               type: "booking-created",
+              ...notification,
+            });
+          } else if (topic === "booking-request-created") {
+            await handleNotificationRequest({
+              type: "booking-request-created",
               ...notification,
             });
           } else if (topic === "payment-processed") {

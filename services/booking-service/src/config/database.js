@@ -218,6 +218,53 @@ const bookingSchema = new mongoose.Schema(
 bookingSchema.index({ room_id: 1, check_in_date: 1, check_out_date: 1, status: 1 });
 bookingSchema.index({ user_id: 1, status: 1, createdAt: -1 });
 
+const BOOKING_REQUEST_STATUSES = [
+  "new",
+  "contacted",
+  "converted",
+  "closed",
+];
+
+const bookingRequestSchema = new mongoose.Schema(
+  {
+    request_reference: { type: String, unique: true, required: true },
+    source: { type: String, default: "landing_page" },
+    status: {
+      type: String,
+      enum: BOOKING_REQUEST_STATUSES,
+      default: "new",
+    },
+    room_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Room",
+      default: null,
+    },
+    room_code: { type: String, default: null },
+    room_name: { type: String, required: true },
+    check_in_date: { type: Date, required: true },
+    check_out_date: { type: Date, required: true },
+    nights: { type: Number, required: true, min: 1 },
+    num_guests: { type: Number, required: true, min: 1 },
+    guest_full_name: { type: String, required: true },
+    guest_phone: { type: String, required: true },
+    guest_area: { type: String, required: true },
+    guest_email: { type: String, default: null },
+    note: { type: String, default: "" },
+    combo_slug: { type: String, default: null },
+    combo_name: { type: String, default: "Không chọn combo" },
+    combo_snapshot: { type: comboSnapshotSchema, default: null },
+    estimated_total: { type: Number, default: 0, min: 0 },
+    context: { type: mongoose.Schema.Types.Mixed, default: {} },
+    contacted_at: { type: Date, default: null },
+    closed_at: { type: Date, default: null },
+  },
+  { timestamps: true, collection: "booking_requests" },
+);
+
+bookingRequestSchema.index({ status: 1, createdAt: -1 });
+bookingRequestSchema.index({ guest_phone: 1, createdAt: -1 });
+bookingRequestSchema.index({ room_code: 1, check_in_date: 1 });
+
 const comboSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -406,6 +453,7 @@ auditLogSchema.index({ createdAt: -1 });
 export const Hotel = mongoose.model("Hotel", hotelSchema);
 export const Room = mongoose.model("Room", roomSchema);
 export const Booking = mongoose.model("Booking", bookingSchema);
+export const BookingRequest = mongoose.model("BookingRequest", bookingRequestSchema);
 export const Combo = mongoose.model("Combo", comboSchema);
 export const Promotion = mongoose.model("Promotion", promotionSchema);
 export const Payment = mongoose.model("Payment", paymentSchema);

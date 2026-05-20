@@ -10,7 +10,7 @@ import {
 import RoomHighlights from "./RoomHighlights";
 import RoomPriceBlock from "./RoomPriceBlock";
 
-export default function RoomCard({ room, variant = "listing", className = "" }) {
+export default function RoomCard({ room, variant = "listing", className = "", queryString = "" }) {
   const isCompare = variant === "compare";
   const factLine = [room.areaSqm ? `${room.areaSqm} m2` : null, getReadableBedSummary(room.bedConfigs)]
     .filter(Boolean)
@@ -80,24 +80,24 @@ export default function RoomCard({ room, variant = "listing", className = "" }) 
 
         <p className="room-preview-note">
           {room.isLive
-            ? "Mở trang chi tiết để kiểm tra ngày ở, sức chứa và tổng tiền trước khi giữ chỗ."
-            : "Xem trước toàn bộ thông tin phòng, tiện nghi và bố cục trước khi Bella mở đặt trực tuyến."}
+            ? "Mở trang chi tiết để chọn ngày, số khách và để lại thông tin giữ chỗ."
+            : "Phòng chưa mở đặt online nhưng Bella vẫn nhận thông tin tư vấn thủ công."}
         </p>
 
         <div className="room-preview-actions">
           <Link
-            to={`/rooms/${room.code}`}
+            to={`/rooms/${room.code}${queryString}`}
             className="button button-secondary"
             data-testid={`view-room-${room.code}`}
           >
             Xem chi tiết
           </Link>
           <Link
-            to={`/rooms/${room.code}#book`}
+            to={`/rooms/${room.code}${queryString}#book`}
             className="button button-primary"
             data-testid={`book-room-${room.code}`}
           >
-            {room.isLive ? "Xem giá và đặt" : "Xem cách đặt"}
+            {room.isLive ? "Chọn phòng" : "Yêu cầu tư vấn"}
             <ArrowRight size={16} />
           </Link>
         </div>

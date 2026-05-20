@@ -5,7 +5,7 @@ export default function BookingSummary({ checkInDate, checkOutDate, guests, comb
   return (
     <div className="booking-summary-card">
       <div className="booking-summary-head">
-        <span>Tóm tắt đặt phòng</span>
+        <span>Tóm tắt giữ chỗ</span>
         <strong>{total ? formatCurrency(total) : "Chờ chọn ngày"}</strong>
       </div>
       <div className="booking-summary-lines">

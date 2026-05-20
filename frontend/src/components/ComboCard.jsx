@@ -10,7 +10,7 @@ function formatComboPrice(combo) {
   return price;
 }
 
-export default function ComboCard({ combo, onSelect, selected = false, compact = false }) {
+export default function ComboCard({ combo, onSelect, onDeselect, selected = false, compact = false }) {
   const services = (combo.includedServices || []).slice(0, compact ? 3 : 5);
 
   return (
@@ -18,6 +18,7 @@ export default function ComboCard({ combo, onSelect, selected = false, compact =
       <div className="combo-card-media">
         {combo.imageUrl ? <img src={combo.imageUrl} alt={combo.name} /> : null}
         <span className="combo-card-badge">{combo.badgeLabel || "Ưu đãi Bella"}</span>
+        {selected ? <span className="combo-card-selected-badge">Đang chọn</span> : null}
       </div>
       <div className="combo-card-body">
         <div className="combo-card-head">
@@ -57,12 +58,17 @@ export default function ComboCard({ combo, onSelect, selected = false, compact =
             Xem chi tiết
           </Link>
           {onSelect ? (
-            <button type="button" className="button button-primary" onClick={() => onSelect(combo)}>
-              {selected ? "Đang chọn" : "Chọn combo này"}
+            <button
+              type="button"
+              className={selected ? "button button-secondary" : "button button-primary"}
+              onClick={() => (selected && onDeselect ? onDeselect(combo) : onSelect(combo))}
+              aria-pressed={selected}
+            >
+              {selected ? "Bỏ chọn" : "Chọn combo"}
             </button>
           ) : (
             <Link to="/rooms" className="button button-primary">
-              Đặt ngay
+              Xem hạng phòng
             </Link>
           )}
         </div>

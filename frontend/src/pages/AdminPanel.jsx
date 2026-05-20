@@ -37,6 +37,7 @@ export default function AdminPanel() {
   const [selectedHotelId, setSelectedHotelId] = useState("");
   const [rooms, setRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [bookingRequests, setBookingRequests] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -48,10 +49,11 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
 
   const loadAdminData = useCallback(async (nextHotelId) => {
-    const [statsResponse, bookingsResponse, promotionsResponse, usersResponse, logsResponse] =
+    const [statsResponse, bookingsResponse, bookingRequestsResponse, promotionsResponse, usersResponse, logsResponse] =
       await Promise.all([
         bookingApi.get("/bookings/admin/stats"),
         bookingApi.get("/bookings", { params: { scope: "all", limit: 50 } }),
+        bookingApi.get("/booking-requests", { params: { limit: 20 } }),
         bookingApi.get("/bookings/promotions/admin/all"),
         userApi.get("/users", { params: { limit: 20 } }),
         bookingApi.get("/bookings/audit-logs", { params: { limit: 12 } }),
@@ -59,6 +61,7 @@ export default function AdminPanel() {
 
     setStats(statsResponse.data);
     setBookings(bookingsResponse.data.bookings || []);
+    setBookingRequests(bookingRequestsResponse.data.bookingRequests || []);
     setPromotions(promotionsResponse.data.promotions || []);
     setUsers(usersResponse.data.users || []);
     setLogs(logsResponse.data.logs || []);
@@ -259,12 +262,67 @@ export default function AdminPanel() {
             <a href="#admin-bookings" className="button button-ghost">
               Đặt phòng
             </a>
+            <a href="#admin-booking-requests" className="button button-ghost">
+              Lead giữ chỗ
+            </a>
             <button type="button" className="button button-secondary" onClick={refreshAll}>
               <RefreshCw size={16} />
               Làm mới
             </button>
           </div>
         </div>
+
+        <div className="stats-row stats-row-four">
+          <article className="stat-card">
+            <span>Lead giữ chỗ mới</span>
+            <strong>{stats?.bookingRequests?.new || 0}</strong>
+            <p>Yêu cầu tư vấn / giữ chỗ landing page đang chờ nhân viên liên hệ.</p>
+          </article>
+        </div>
+
+        <section className="panel admin-section" id="admin-booking-requests">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Yêu cầu giữ chỗ</p>
+              <h2 className="panel-title">Lead từ landing page cần liên hệ</h2>
+              <p className="section-copy section-copy-tight">
+                Danh sách này không phải booking đã thanh toán. Đây là thông tin khách để lại để
+                nhân viên Bella xác nhận thủ công.
+              </p>
+            </div>
+          </div>
+
+          <div className="admin-list">
+            {bookingRequests.length ? (
+              bookingRequests.map((request) => (
+                <article key={request.id} className="admin-list-item admin-list-item-wide">
+                  <div>
+                    <strong>{request.requestReference}</strong>
+                    <p>
+                      {request.guestContact?.fullName} · {request.guestContact?.phone} ·{" "}
+                      {request.guestContact?.area}
+                    </p>
+                    <p>
+                      {request.roomName} · {formatDateRange(request.checkInDate, request.checkOutDate)} ·{" "}
+                      {request.numGuests} khách
+                    </p>
+                    <p>Combo: {request.combo?.name || "Không chọn combo"}</p>
+                    {request.note ? <p>Ghi chú: {request.note}</p> : null}
+                  </div>
+                  <span className="status-pill status-pill-pending">
+                    {request.status === "new" ? "Mới" : request.status}
+                  </span>
+                </article>
+              ))
+            ) : (
+              <div className="empty-state empty-state-inline">
+                <div className="empty-state-stack">
+                  <p>Chưa có yêu cầu giữ chỗ nào từ landing page.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
         <div className="stats-row stats-row-four">
           <article className="stat-card">

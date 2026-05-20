@@ -361,6 +361,34 @@ test("booking creation stores reference and promo server-side", async () => {
   state.createdBookingReference = bookingResponse.body.booking.bookingReference;
 });
 
+test("landing booking request stores lead context without payment", async () => {
+  const leadResponse = await request(`${baseUrls.booking}/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: state.roomId,
+      roomCode: "bella-test-room",
+      roomName: "Bella Test Room",
+      checkInDate: "2026-10-10",
+      checkOutDate: "2026-10-12",
+      numGuests: 2,
+      guestFullName: "Landing Guest",
+      guestPhone: "+84901234567",
+      guestArea: "TP.HCM",
+      guestEmail: "landing.guest@example.com",
+      comboName: "Không chọn combo",
+      estimatedTotal: 1200000,
+      note: "Muốn nhân viên gọi lại.",
+    }),
+  });
+
+  assert.equal(leadResponse.status, 201);
+  assert.match(leadResponse.body.bookingRequest.requestReference, /^BRQ-/);
+  assert.equal(leadResponse.body.bookingRequest.status, "new");
+  assert.equal(leadResponse.body.bookingRequest.guestContact.phone, "+84901234567");
+  assert.equal(leadResponse.body.bookingRequest.combo.name, "Không chọn combo");
+  assert.equal(leadResponse.body.bookingRequest.payment, undefined);
+});
+
 test("booking creation rejects missing rooms and invalid stay dates", async () => {
   const missingRoomResponse = await createBooking(state.userToken, {
     roomId: "66f0aa00000000000000ffff",
@@ -428,14 +456,19 @@ test("invalid admin promotion payloads are rejected", async () => {
 });
 
 test("frontend payment flow uses hosted checkout instead of app-owned payment capture", () => {
+  const bookingsSource = readFileSync(
+    path.join(process.cwd(), "frontend", "src", "pages", "Bookings.jsx"),
+    "utf8",
+  );
   const roomDetailSource = readFileSync(
     path.join(process.cwd(), "frontend", "src", "pages", "RoomDetailPage.jsx"),
     "utf8",
   );
 
-  assert.match(roomDetailSource, /\/payments\/checkout-sessions/);
-  assert.match(roomDetailSource, /hosted checkout/i);
-  assert.match(roomDetailSource, /không tự thu thập thông\s*tin thẻ thô/i);
+  assert.match(bookingsSource, /\/payments\/checkout-sessions/);
+  assert.match(bookingsSource, /Tiếp tục thanh toán/i);
+  assert.doesNotMatch(roomDetailSource, /\/payments\/checkout-sessions/);
+  assert.match(roomDetailSource, /không tạo payment link/i);
 });
 
 test("legacy direct payment endpoint is retired and hosted checkout session is created instead", async () => {

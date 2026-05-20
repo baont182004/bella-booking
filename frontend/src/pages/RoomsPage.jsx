@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Filter, MapPin, SlidersHorizontal } from "lucide-react";
 import FeaturedRoomCompare from "../components/FeaturedRoomCompare";
 import LoadingGrid from "../components/LoadingGrid";
 import RoomCard from "../components/RoomCard";
 import { bellaContent } from "../content/bellaContent";
 import { useBellaHotelData } from "../hooks/useBellaHotelData";
-import { formatCurrency } from "../utils/formatters";
+import { formatCurrency, formatGuestLabel } from "../utils/formatters";
 
 const featuredRoomCodes = ["sea-view-double-or-twin-room", "garden-family-room"];
 
@@ -85,15 +85,46 @@ function sortRooms(rooms, sortBy) {
 }
 
 export default function RoomsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { roomCatalog, liveStartingRate, loading, loadError } = useBellaHotelData();
-  const [purposeFilter, setPurposeFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("recommended");
-  const [showLiveOnly, setShowLiveOnly] = useState(true);
+  const [purposeFilter, setPurposeFilter] = useState(() => {
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    return purposeFilters.some((filterItem) => filterItem.id === params.get("purpose"))
+      ? params.get("purpose")
+      : "all";
+  });
+  const [sortBy, setSortBy] = useState(() => {
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    return params.get("sort") || "recommended";
+  });
+  const [showLiveOnly, setShowLiveOnly] = useState(() => {
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    return params.get("liveOnly") !== "false";
+  });
   const [showLocationMap, setShowLocationMap] = useState(false);
 
   useEffect(() => {
     document.title = "Hạng phòng | Bella Hotel Phú Quốc";
   }, []);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(location.search);
+
+    if (purposeFilter !== "all") nextParams.set("purpose", purposeFilter);
+    else nextParams.delete("purpose");
+
+    if (sortBy !== "recommended") nextParams.set("sort", sortBy);
+    else nextParams.delete("sort");
+
+    if (!showLiveOnly) nextParams.set("liveOnly", "false");
+    else nextParams.delete("liveOnly");
+
+    const nextSearch = nextParams.toString() ? `?${nextParams.toString()}` : "";
+    if (nextSearch !== location.search) {
+      navigate({ pathname: location.pathname, search: nextSearch }, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate, purposeFilter, showLiveOnly, sortBy]);
 
   const featuredRooms = useMemo(
     () =>
@@ -117,6 +148,27 @@ export default function RoomsPage() {
 
   const liveRoomCount = roomCatalog.filter((room) => room.isLive).length;
   const familyRoomCount = roomCatalog.filter((room) => matchesPurpose(room, "family")).length;
+  const nearestRooms = useMemo(() => {
+    if (filteredRooms.length) return [];
+
+    const withoutLiveOnly = sortRooms(
+      roomCatalog.filter((room) => matchesPurpose(room, purposeFilter)),
+      sortBy,
+    );
+    if (withoutLiveOnly.length) return withoutLiveOnly.slice(0, 2);
+
+    if (purposeFilter === "family") {
+      return sortRooms(roomCatalog, "capacity").slice(0, 2);
+    }
+
+    return sortRooms(roomCatalog, sortBy).slice(0, 2);
+  }, [filteredRooms.length, purposeFilter, roomCatalog, sortBy]);
+  const consultationRoomCode = nearestRooms[0]?.code || roomCatalog[0]?.code || "";
+  const resetFilters = ({ includeOffline = false } = {}) => {
+    setPurposeFilter("all");
+    setShowLiveOnly(!includeOffline);
+    setSortBy("recommended");
+  };
   const locationEmbedUrl = useMemo(
     () =>
       `https://www.google.com/maps?q=${encodeURIComponent(bellaContent.property.address)}&z=16&output=embed`,
@@ -165,10 +217,10 @@ export default function RoomsPage() {
 
             <div className="rooms-hero-card">
               <p className="eyebrow">Đặt trực tiếp tại Bella</p>
-              <h2>So sánh nhanh trước, rồi mở trang chi tiết khi bạn đã thấy hợp.</h2>
+              <h2>So sánh nhanh trước, rồi để lại thông tin khi bạn đã thấy hợp.</h2>
               <p>
-                Mỗi trang chi tiết sẽ giữ nguyên tông thông tin này và dẫn thẳng đến bước kiểm tra
-                ngày ở, giữ chỗ và thanh toán.
+                Mỗi trang chi tiết sẽ dẫn đến bước chọn ngày, số khách, combo nếu muốn và form để
+                nhân viên Bella liên hệ xác nhận.
               </p>
               <div className="rooms-hero-actions">
                 <Link to="/lookup" className="button button-secondary">
@@ -234,7 +286,7 @@ export default function RoomsPage() {
                   checked={showLiveOnly}
                   onChange={() => setShowLiveOnly((prev) => !prev)}
                 />
-                <span>Chỉ hiện phòng có thể đặt ngay</span>
+                <span>Chỉ hiện phòng mở trực tuyến</span>
               </label>
               <label className="rooms-sort">
                 <SlidersHorizontal size={16} />
@@ -302,7 +354,7 @@ export default function RoomsPage() {
                     {filteredRooms.length} lựa chọn phù hợp với bộ lọc hiện tại
                   </h2>
                   <p className="section-copy section-copy-tight">
-                    Mỗi thẻ phòng đều dẫn đến trang chi tiết và bước giữ chỗ trực tiếp.
+                    Mỗi thẻ phòng đều dẫn đến trang chi tiết và form giữ chỗ / tư vấn.
                   </p>
                 </div>
                 <Link to="/lookup" className="button button-secondary">
@@ -313,25 +365,64 @@ export default function RoomsPage() {
               {filteredRooms.length ? (
                 <div className="room-listing-grid">
                   {filteredRooms.map((room) => (
-                    <RoomCard key={room.code} room={room} />
+                    <RoomCard key={room.code} room={room} queryString={location.search} />
                   ))}
                 </div>
               ) : (
                 <div className="empty-state">
                   <div className="empty-state-stack">
                     <p>Chưa có hạng phòng khớp với bộ lọc này.</p>
-                    <span>Hãy mở rộng bộ lọc để xem lại toàn bộ lựa chọn lưu trú tại Bella.</span>
-                    <button
-                      type="button"
-                      className="button button-secondary"
-                      onClick={() => {
-                        setPurposeFilter("all");
-                        setShowLiveOnly(true);
-                        setSortBy("recommended");
-                      }}
-                    >
-                      Xem lại danh sách gợi ý
-                    </button>
+                    <span>
+                      Hãy mở rộng bộ lọc, xem tất cả phòng hoặc gửi yêu cầu tư vấn để Bella gợi ý
+                      phương án gần nhất.
+                    </span>
+                    {purposeFilter === "family" ? (
+                      <span>
+                        Bộ lọc Gia đình & nhóm nhỏ có thể đang bị giới hạn bởi trạng thái đặt trực
+                        tuyến. Bạn có thể mở cả phòng tư vấn thủ công hoặc xem các phòng sức chứa
+                        gần nhất bên dưới.
+                      </span>
+                    ) : null}
+                    <div className="empty-state-actions">
+                      <button
+                        type="button"
+                        className="button button-primary"
+                        onClick={() => resetFilters({ includeOffline: true })}
+                      >
+                        Xem tất cả phòng
+                      </button>
+                      {consultationRoomCode ? (
+                        <Link
+                          to={`/rooms/${consultationRoomCode}${location.search}#book`}
+                          className="button button-secondary"
+                        >
+                          Gửi yêu cầu tư vấn
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="button button-ghost"
+                        onClick={() => resetFilters()}
+                      >
+                        Xóa bộ lọc
+                      </button>
+                    </div>
+                    {nearestRooms.length ? (
+                      <div className="nearby-room-list">
+                        {nearestRooms.map((room) => (
+                          <Link
+                            key={room.code}
+                            to={`/rooms/${room.code}${location.search}#book`}
+                            className="nearby-room-link"
+                          >
+                            {room.displayName} ·
+                            {room.capacity || room.maxOccupancy
+                              ? ` tối đa ${formatGuestLabel(room.capacity || room.maxOccupancy)}`
+                              : " xem chi tiết"}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -342,11 +433,12 @@ export default function RoomsPage() {
         <section className="panel panel-soft rooms-footer-note">
           <div>
             <p className="eyebrow">Trước khi đặt</p>
-            <h2 className="panel-title">Bella sẽ xác nhận ngày ở, sức chứa và tổng tiền ở trang chi tiết.</h2>
+            <h2 className="panel-title">Bella sẽ xác nhận ngày ở, sức chứa và tổng tiền sau khi nhận thông tin.</h2>
           </div>
           <p>
             Chọn hạng phòng trước, sau đó kiểm tra tình trạng còn phòng, nhập thông tin khách lưu
-            trú và hoàn tất thanh toán trực tiếp. Quy trình giữ nguyên cho toàn bộ hệ thống BELLA.
+            trú và gửi yêu cầu giữ chỗ. Nhân viên sẽ liên hệ lại, không ép bạn thanh toán trong
+            landing page này.
           </p>
           <Link to="/" className="text-link rooms-footer-link">
             Quay lại trang giới thiệu khách sạn

@@ -4,13 +4,13 @@ import {
   Activity,
   BadgeCheck,
   CalendarRange,
-  Lock,
   Mail,
   Phone,
   User,
   UserPlus,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import PasswordInput from "../components/PasswordInput";
 import { useAuth } from "../context/auth-context";
 import { passwordPolicyHint, validateStrongPassword } from "../utils/passwordPolicy";
 
@@ -234,19 +234,15 @@ export default function Register() {
 
             <label className="form-field">
               <span>Mật khẩu</span>
-              <span className="input-shell">
-                <Lock size={16} />
-                <input
-                  type="password"
-                  name="password"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={handleChange}
-                  data-testid="register-password"
-                  aria-invalid={Boolean(errors.password)}
-                  required
-                />
-              </span>
+              <PasswordInput
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                testId="register-password"
+                invalid={Boolean(errors.password)}
+                autoComplete="new-password"
+                required
+              />
               {errors.password ? (
                 <span className="field-error">{errors.password}</span>
               ) : (

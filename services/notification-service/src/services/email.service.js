@@ -90,10 +90,52 @@ async function sendBookingCancellation({ email, bookingId }) {
   return await sendEmail({ to: email, subject, html });
 }
 
+async function sendBookingRequestNotification({
+  requestReference,
+  roomName,
+  checkIn,
+  checkOut,
+  nights,
+  numGuests,
+  guestFullName,
+  guestPhone,
+  guestArea,
+  guestEmail,
+  combo,
+  note,
+  estimatedTotal,
+}) {
+  const to = process.env.STAFF_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  const subject = `Bella lead giữ chỗ mới: ${requestReference}`;
+  const html = `
+    <h1>Bella đã nhận yêu cầu giữ chỗ mới</h1>
+    <h2>Thông tin yêu cầu</h2>
+    <ul>
+      <li><strong>Mã yêu cầu:</strong> ${requestReference}</li>
+      <li><strong>Hạng phòng quan tâm:</strong> ${roomName || 'N/A'}</li>
+      <li><strong>Ngày ở:</strong> ${checkIn || 'N/A'} - ${checkOut || 'N/A'} (${nights || 'N/A'} đêm)</li>
+      <li><strong>Số khách:</strong> ${numGuests || 'N/A'}</li>
+      <li><strong>Combo:</strong> ${combo?.name || 'Không chọn combo'}</li>
+      <li><strong>Tạm tính:</strong> ${estimatedTotal || 0} VND</li>
+    </ul>
+    <h2>Thông tin khách</h2>
+    <ul>
+      <li><strong>Họ tên:</strong> ${guestFullName || 'N/A'}</li>
+      <li><strong>Số điện thoại:</strong> ${guestPhone || 'N/A'}</li>
+      <li><strong>Khu vực:</strong> ${guestArea || 'N/A'}</li>
+      <li><strong>Email:</strong> ${guestEmail || 'Không cung cấp'}</li>
+      <li><strong>Ghi chú:</strong> ${note || 'Không có'}</li>
+    </ul>
+  `;
+
+  return await sendEmail({ to, subject, html });
+}
+
 export {
   initializeEmailService,
   sendEmail,
   sendBookingConfirmation,
   sendPaymentConfirmation,
-  sendBookingCancellation
+  sendBookingCancellation,
+  sendBookingRequestNotification
 };

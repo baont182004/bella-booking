@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Activity, Lock, LogIn, Mail, ShieldCheck, Sparkles } from "lucide-react";
+import { Activity, LogIn, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
+import PasswordInput from "../components/PasswordInput";
 import { useAuth } from "../context/auth-context";
 
 const pendingLoginStorageKey = "bella_pending_login";
@@ -181,21 +182,17 @@ export default function Login() {
 
             <label className="form-field">
               <span>Mật khẩu</span>
-              <span className="input-shell">
-                <Lock size={16} />
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(event) => {
-                    setPassword(event.target.value);
-                    setErrors((prev) => ({ ...prev, password: undefined }));
-                  }}
-                  data-testid="login-password"
-                  aria-invalid={Boolean(errors.password)}
-                  required
-                />
-              </span>
+              <PasswordInput
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setErrors((prev) => ({ ...prev, password: undefined }));
+                }}
+                testId="login-password"
+                invalid={Boolean(errors.password)}
+                autoComplete="current-password"
+                required
+              />
               {errors.password ? (
                 <span className="field-error">{errors.password}</span>
               ) : (
