@@ -101,8 +101,25 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route path="/booking" element={<Navigate to="/bookings" replace />} />
         <Route
           path="/payments/return"
+          element={
+            <PrivateRoute>
+              <PaymentReturnPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/payment/success"
+          element={
+            <PrivateRoute>
+              <PaymentReturnPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/payment/cancel"
           element={
             <PrivateRoute>
               <PaymentReturnPage />

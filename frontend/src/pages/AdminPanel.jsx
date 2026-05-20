@@ -55,7 +55,7 @@ export default function AdminPanel() {
       await Promise.all([
         bookingApi.get("/bookings/admin/stats"),
         bookingApi.get("/bookings", { params: { scope: "all", limit: 50 } }),
-        bookingApi.get("/booking-requests", { params: { limit: 20 } }),
+        bookingApi.get("/bookings/booking-requests", { params: { limit: 20 } }),
         bookingApi.get("/bookings/promotions/admin/all"),
         userApi.get("/users", { params: { limit: 20 } }),
         bookingApi.get("/bookings/audit-logs", { params: { limit: 12 } }),
@@ -177,7 +177,7 @@ export default function AdminPanel() {
 
   const handleViewBookingRequest = async (requestId) => {
     try {
-      const response = await bookingApi.get(`/booking-requests/${requestId}`);
+      const response = await bookingApi.get(`/bookings/booking-requests/${requestId}`);
       const nextRequest = response.data.bookingRequest;
       setSelectedBookingRequest(nextRequest);
       setBookingRequestNoteDraft(nextRequest.internalNote || "");
@@ -188,7 +188,7 @@ export default function AdminPanel() {
 
   const handleBookingRequestUpdate = async (requestId, updates) => {
     try {
-      const response = await bookingApi.patch(`/booking-requests/${requestId}`, updates);
+      const response = await bookingApi.patch(`/bookings/booking-requests/${requestId}`, updates);
       const nextRequest = response.data.bookingRequest;
       setBookingRequests((prev) =>
         prev.map((request) => (request.id === nextRequest.id ? nextRequest : request)),

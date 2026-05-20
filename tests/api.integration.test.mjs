@@ -363,7 +363,7 @@ test("booking creation stores reference and promo server-side", async () => {
 });
 
 test("landing booking request stores lead context without payment", async () => {
-  const leadResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const leadResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomId: state.roomId,
@@ -380,18 +380,28 @@ test("landing booking request stores lead context without payment", async () => 
       comboName: "Không chọn combo",
       estimatedTotal: 1200000,
       note: "Muốn nhân viên gọi lại.",
+      context: {
+        landingPath: "/rooms/bella-test-room?checkIn=2026-10-10&checkOut=2026-10-12#book",
+        roomIsLive: true,
+        roomSlug: "bella-test-room",
+        roomPrice: 600000,
+        roomCapacity: 2,
+        roomBedSummary: "1 giường đôi",
+      },
     }),
   });
 
   assert.equal(leadResponse.status, 201);
   assert.equal(leadResponse.body.success, true);
   assert.match(leadResponse.body.requestCode, /^BRQ-/);
+  assert.equal(leadResponse.body.reservationRequest.requestCode, leadResponse.body.requestCode);
   assert.match(leadResponse.body.bookingRequest.requestReference, /^BRQ-/);
   assert.equal(leadResponse.body.bookingRequest.requestCode, leadResponse.body.requestCode);
   assert.equal(leadResponse.body.bookingRequest.status, "new");
   assert.equal(leadResponse.body.bookingRequest.noCombo, true);
   assert.equal(leadResponse.body.bookingRequest.guestContact.phone, "+84901234567");
   assert.equal(leadResponse.body.bookingRequest.combo.name, "Không chọn combo");
+  assert.equal(leadResponse.body.bookingRequest.context.roomSlug, "bella-test-room");
   assert.equal(leadResponse.body.paymentUrl, undefined);
   assert.equal(leadResponse.body.checkoutSession, undefined);
   assert.equal(leadResponse.body.booking, undefined);
@@ -400,7 +410,7 @@ test("landing booking request stores lead context without payment", async () => 
 });
 
 test("landing booking request validates payload and combo consistency", async () => {
-  const invalidPhoneResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const invalidPhoneResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomId: state.roomId,
@@ -415,9 +425,11 @@ test("landing booking request validates payload and combo consistency", async ()
     }),
   });
   assert.equal(invalidPhoneResponse.status, 400);
+  assert.equal(invalidPhoneResponse.body.success, false);
   assert.match(invalidPhoneResponse.body.error, /phone/i);
+  assert.ok(Array.isArray(invalidPhoneResponse.body.details));
 
-  const invalidDatesResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const invalidDatesResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomId: state.roomId,
@@ -432,9 +444,9 @@ test("landing booking request validates payload and combo consistency", async ()
     }),
   });
   assert.equal(invalidDatesResponse.status, 400);
-  assert.match(invalidDatesResponse.body.error, /Check-out/i);
+  assert.match(invalidDatesResponse.body.error, /Ngày trả phòng/i);
 
-  const comboConflictResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const comboConflictResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomId: state.roomId,
@@ -452,7 +464,7 @@ test("landing booking request validates payload and combo consistency", async ()
   assert.equal(comboConflictResponse.status, 400);
   assert.match(comboConflictResponse.body.error, /no combo|selected combo/i);
 
-  const comboNameConflictResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const comboNameConflictResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomId: state.roomId,
@@ -477,7 +489,7 @@ test("landing booking request accepts a selected existing combo", async () => {
   const combo = combosResponse.body.combos[0];
   assert.ok(combo?.slug);
 
-  const leadResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const leadResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomId: state.roomId,
@@ -499,7 +511,7 @@ test("landing booking request accepts a selected existing combo", async () => {
 });
 
 test("landing booking request accepts public payload aliases", async () => {
-  const leadResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const leadResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
       roomTypeId: "family-suite",
@@ -523,15 +535,15 @@ test("landing booking request accepts public payload aliases", async () => {
 });
 
 test("admin booking request list is protected and includes lead fields", async () => {
-  const publicResponse = await request(`${baseUrls.booking}/booking-requests`);
+  const publicResponse = await request(`${baseUrls.booking}/bookings/booking-requests`);
   assert.equal(publicResponse.status, 401);
 
-  const customerResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const customerResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     headers: { Authorization: `Bearer ${state.userToken}` },
   });
   assert.equal(customerResponse.status, 403);
 
-  const adminResponse = await request(`${baseUrls.booking}/booking-requests`, {
+  const adminResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     headers: { Authorization: `Bearer ${state.adminToken}` },
   });
   assert.equal(adminResponse.status, 200);
@@ -544,13 +556,13 @@ test("admin booking request list is protected and includes lead fields", async (
   assert.ok(createdLead.roomName);
   assert.equal(createdLead.combo.name, "Không chọn combo");
 
-  const detailResponse = await request(`${baseUrls.booking}/booking-requests/${createdLead.id}`, {
+  const detailResponse = await request(`${baseUrls.booking}/bookings/booking-requests/${createdLead.id}`, {
     headers: { Authorization: `Bearer ${state.adminToken}` },
   });
   assert.equal(detailResponse.status, 200);
   assert.equal(detailResponse.body.bookingRequest.requestReference, state.createdBookingRequestCode);
 
-  const statusResponse = await request(`${baseUrls.booking}/booking-requests/${createdLead.id}`, {
+  const statusResponse = await request(`${baseUrls.booking}/bookings/booking-requests/${createdLead.id}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${state.adminToken}` },
     body: JSON.stringify({ status: "contacted", internalNote: "Called guest once." }),
@@ -649,6 +661,9 @@ test("frontend payment flow uses hosted checkout instead of app-owned payment ca
 
   assert.match(bookingsSource, /\/payments\/checkout-sessions/);
   assert.match(bookingsSource, /Tiếp tục thanh toán/i);
+  assert.match(roomDetailSource, /\/bookings\/booking-requests/);
+  assert.doesNotMatch(roomDetailSource, /post\("\/booking-requests"/);
+  assert.doesNotMatch(roomDetailSource, /roomSlug/);
   assert.doesNotMatch(roomDetailSource, /\/payments\/checkout-sessions/);
   assert.match(roomDetailSource, /không tạo payment link/i);
 });

@@ -50,6 +50,40 @@ function scrollToSection(sectionId) {
 }
 
 const leadDraftTtlMs = 7 * 24 * 60 * 60 * 1000;
+const phonePattern = /^\+?[0-9][0-9\s().-]{5,39}$/;
+
+function isValidEmail(value = "") {
+  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+const HOLD_SYSTEM_UNREACHABLE_MESSAGE =
+  "Không thể kết nối tới hệ thống giữ chỗ. Vui lòng thử lại hoặc liên hệ Bella.";
+
+function getApiErrorMessage(error, fallback) {
+  if (!error.response) {
+    return HOLD_SYSTEM_UNREACHABLE_MESSAGE;
+  }
+
+  const { status, data } = error.response;
+  const backendMessage =
+    data && typeof data === "object"
+      ? data.details?.[0]?.message || data.error || data.message
+      : null;
+
+  if (backendMessage) {
+    return backendMessage;
+  }
+
+  if ([404, 502, 503, 504].includes(status) || typeof data === "string") {
+    return HOLD_SYSTEM_UNREACHABLE_MESSAGE;
+  }
+
+  if (status === 401 || status === 403) {
+    return "Hệ thống giữ chỗ đang từ chối yêu cầu. Vui lòng thử lại hoặc liên hệ Bella.";
+  }
+
+  return status >= 500 ? HOLD_SYSTEM_UNREACHABLE_MESSAGE : fallback;
+}
 
 function getLeadDraftKey(roomCode) {
   return `bella_landing_lead_draft_${roomCode || "unknown"}`;
@@ -334,6 +368,21 @@ export default function RoomDetailPage() {
       return;
     }
 
+    if (!phonePattern.test(bookingData.guestPhone.trim())) {
+      toast.error("Số điện thoại chưa đúng định dạng. Vui lòng kiểm tra lại.");
+      return;
+    }
+
+    if (!isValidEmail(bookingData.guestEmail.trim())) {
+      toast.error("Email chưa đúng định dạng. Bạn có thể bỏ trống email nếu không muốn cung cấp.");
+      return;
+    }
+
+    if (Number(bookingData.numGuests || 0) < 1) {
+      toast.error("Số khách phải từ 1 trở lên.");
+      return;
+    }
+
     if (!room?.code && !room?.displayName) {
       toast.error("Bella chưa nhận diện được hạng phòng bạn đang quan tâm.");
       return;
@@ -341,7 +390,7 @@ export default function RoomDetailPage() {
 
     try {
       setIsSubmitting(true);
-      const response = await bookingApi.post("/booking-requests", {
+      const response = await bookingApi.post("/bookings/booking-requests", {
         roomId: room.id || undefined,
         roomTypeId: room.id || room.code,
         roomCode: room.code,
@@ -361,17 +410,13 @@ export default function RoomDetailPage() {
         context: {
           landingPath: `${location.pathname}${location.search}${location.hash}`,
           roomIsLive: Boolean(room.isLive),
-          roomSlug: room.code,
-          roomPrice: room.pricing?.currentPrice || null,
-          roomCapacity: room.capacity || room.maxOccupancy || null,
-          roomBedSummary: getReadableBedSummary(room.bedConfigs),
         },
       });
-      setBookingResult(response.data.bookingRequest);
+      setBookingResult(response.data.reservationRequest || response.data.bookingRequest);
       toast.success("Bella đã nhận thông tin giữ chỗ của bạn. Nhân viên sẽ liên hệ xác nhận trong thời gian sớm nhất.");
       scrollToSection("book");
     } catch (error) {
-      toast.error(error.response?.data?.error || "Không thể gửi yêu cầu giữ chỗ.");
+      toast.error(getApiErrorMessage(error, "Không thể gửi yêu cầu giữ chỗ."));
     } finally {
       setIsSubmitting(false);
     }

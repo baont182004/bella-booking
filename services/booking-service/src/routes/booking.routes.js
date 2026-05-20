@@ -101,7 +101,7 @@ const bookingRequestSchema = Joi.object({
     .pattern(/^\+?[0-9][0-9\s().-]{5,39}$/)
     .required()
     .messages({
-      "string.pattern.base": "Enter a valid phone number.",
+      "string.pattern.base": "Số điện thoại chưa đúng định dạng.",
     }),
   guestArea: Joi.string().trim().min(2).max(180).required(),
   guestEmail: Joi.string().trim().lowercase().email().allow("").optional(),
@@ -114,6 +114,10 @@ const bookingRequestSchema = Joi.object({
   context: Joi.object({
     landingPath: Joi.string().trim().max(300).allow("").optional(),
     roomIsLive: Joi.boolean().optional(),
+    roomSlug: Joi.string().trim().max(160).allow("").optional(),
+    roomPrice: Joi.number().min(0).allow(null).optional(),
+    roomCapacity: Joi.number().integer().min(1).allow(null).optional(),
+    roomBedSummary: Joi.string().trim().max(240).allow("").optional(),
     userAgent: Joi.string().trim().max(300).allow("").optional(),
   }).default({}),
 })
@@ -136,8 +140,28 @@ const bookingRequestSchema = Joi.object({
   })
   .messages({
     "any.custom": "{{#message}}",
+    "any.required": "{{#label}} là bắt buộc.",
+    "number.positive": "{{#label}} phải lớn hơn 0.",
+    "number.integer": "{{#label}} phải là số nguyên.",
+    "string.email": "Email không hợp lệ.",
   })
   .unknown(false);
+
+function formatJoiValidationDetails(details = []) {
+  return details.map((detail) => ({
+    field: detail.path.join("."),
+    message: detail.message,
+    type: detail.type,
+  }));
+}
+
+function sendRequestValidationError(res, message, details = []) {
+  return res.status(400).json({
+    success: false,
+    error: message,
+    details,
+  });
+}
 
 function normalizeBookingRequestPayload(body = {}) {
   const payload = { ...body };
@@ -316,20 +340,20 @@ function validateStayDates(checkInValue, checkOutValue) {
   const today = parseDateOnly(getBellaTodayString());
 
   if (!checkIn || !checkOut || !today) {
-    return { error: "Enter valid check-in and check-out dates." };
+    return { error: "Ngày nhận phòng hoặc ngày trả phòng chưa hợp lệ." };
   }
 
   if (checkIn < today) {
-    return { error: "Check-in must be today or later." };
+    return { error: "Ngày nhận phòng phải từ hôm nay trở đi." };
   }
 
   if (checkOut <= checkIn) {
-    return { error: "Check-out must be after check-in." };
+    return { error: "Ngày trả phòng phải sau ngày nhận phòng." };
   }
 
   const nights = Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24));
   if (nights <= 0) {
-    return { error: "Select at least one night for your Bella stay." };
+    return { error: "Vui lòng chọn ít nhất một đêm lưu trú tại Bella." };
   }
 
   return { checkIn, checkOut, nights };
@@ -1441,33 +1465,46 @@ router.get("/availability", publicRateLimit, async (req, res) => {
 // -- POST /booking-requests -----------------------------------------------------
 router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
   try {
-    const { error, value } = bookingRequestSchema.validate(normalizeBookingRequestPayload(req.body));
+    const { error, value } = bookingRequestSchema.validate(normalizeBookingRequestPayload(req.body), {
+      abortEarly: false,
+      errors: { wrap: { label: false } },
+    });
     if (error) {
-      return res.status(400).json({ error: error.details[0].message });
+      const details = formatJoiValidationDetails(error.details);
+      return sendRequestValidationError(res, details[0]?.message || "Thông tin giữ chỗ chưa hợp lệ.", details);
     }
 
     const stay = validateStayDates(value.checkInDate, value.checkOutDate);
     if (stay.error) {
-      return res.status(400).json({ error: stay.error });
+      return sendRequestValidationError(res, stay.error, [
+        { field: "checkOutDate", message: stay.error, type: "date.range" },
+      ]);
     }
 
     let room = null;
     const hasRoomId = value.roomId && mongoose.Types.ObjectId.isValid(value.roomId);
     if (value.roomId && !hasRoomId) {
-      return res.status(400).json({ error: "Invalid room id" });
+      return sendRequestValidationError(res, "Mã phòng không hợp lệ.", [
+        { field: "roomId", message: "Mã phòng không hợp lệ.", type: "objectId.invalid" },
+      ]);
     }
 
     if (hasRoomId) {
       room = await loadBellaRoom(value.roomId, { includeInactive: true });
       if (!room) {
-        return res.status(404).json({ error: "Bella room not found" });
+        return res.status(404).json({
+          success: false,
+          error: "Bella chưa tìm thấy hạng phòng này trong hệ thống.",
+        });
       }
     }
 
     let comboSnapshot = null;
     if (value.comboId || value.comboSlug) {
       if (value.comboId && !mongoose.Types.ObjectId.isValid(value.comboId)) {
-        return res.status(400).json({ error: "Invalid combo id" });
+        return sendRequestValidationError(res, "Mã combo không hợp lệ.", [
+          { field: "comboId", message: "Mã combo không hợp lệ.", type: "objectId.invalid" },
+        ]);
       }
 
       const comboQuery = value.comboId
@@ -1475,7 +1512,10 @@ router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
         : { slug: value.comboSlug };
       const combo = await Combo.findOne(comboQuery).lean();
       if (!combo) {
-        return res.status(404).json({ error: "Bella combo not found" });
+        return res.status(404).json({
+          success: false,
+          error: "Combo đã chọn hiện không còn phù hợp. Vui lòng chọn lại hoặc chọn Không chọn combo.",
+        });
       }
 
       comboSnapshot = {
@@ -1572,11 +1612,15 @@ router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
       success: true,
       message: "Booking request received",
       requestCode: requestReference,
+      reservationRequest: serializeBookingRequest(bookingRequest),
       bookingRequest: serializeBookingRequest(bookingRequest),
     });
   } catch (error) {
     console.error("Create booking request error:", error);
-    res.status(500).json({ error: "Failed to create booking request" });
+    res.status(500).json({
+      success: false,
+      error: "Bella chưa thể nhận yêu cầu giữ chỗ lúc này. Vui lòng thử lại sau.",
+    });
   }
 });
 
