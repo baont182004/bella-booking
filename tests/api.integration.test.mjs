@@ -233,6 +233,8 @@ before(async () => {
   const rooms = await request(`${baseUrls.hotel}/hotels/${state.hotelId}/rooms?available=true`);
   assert.equal(rooms.status, 200);
   state.roomId = rooms.body.rooms[0].id;
+  state.roomCode = rooms.body.rooms[0].code || rooms.body.rooms[0].room_number;
+  assert.ok(state.roomCode);
 });
 
 test("register and login flow works", async () => {
@@ -383,7 +385,7 @@ test("landing booking request stores lead context without payment", async () => 
       context: {
         landingPath: "/rooms/bella-test-room?checkIn=2026-10-10&checkOut=2026-10-12#book",
         roomIsLive: true,
-        roomSlug: "bella-test-room",
+        roomSlug: state.roomCode,
         roomPrice: 600000,
         roomCapacity: 2,
         roomBedSummary: "1 giường đôi",
@@ -401,7 +403,7 @@ test("landing booking request stores lead context without payment", async () => 
   assert.equal(leadResponse.body.bookingRequest.noCombo, true);
   assert.equal(leadResponse.body.bookingRequest.guestContact.phone, "+84901234567");
   assert.equal(leadResponse.body.bookingRequest.combo.name, "Không chọn combo");
-  assert.equal(leadResponse.body.bookingRequest.context.roomSlug, "bella-test-room");
+  assert.equal(leadResponse.body.bookingRequest.context.roomSlug, state.roomCode);
   assert.equal(leadResponse.body.paymentUrl, undefined);
   assert.equal(leadResponse.body.checkoutSession, undefined);
   assert.equal(leadResponse.body.booking, undefined);
@@ -514,24 +516,113 @@ test("landing booking request accepts public payload aliases", async () => {
   const leadResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
     method: "POST",
     body: JSON.stringify({
-      roomTypeId: "family-suite",
+      roomId: 1,
+      roomSlug: state.roomCode,
       roomTypeName: "Family Suite",
-      checkInDate: "2026-10-18",
-      checkOutDate: "2026-10-20",
+      checkIn: "2026-10-18",
+      checkOut: "2026-10-20",
       guests: 3,
-      fullName: "Alias Guest",
+      customerName: "Alias Guest",
       phone: "+84901112233",
+      email: "alias.guest@example.com",
       address: "Đà Nẵng",
       noCombo: true,
+      context: {
+        roomSlug: state.roomCode,
+        roomPrice: 1200000,
+        roomCapacity: 3,
+        roomBedSummary: "1 giường đôi",
+      },
     }),
   });
 
   assert.equal(leadResponse.status, 201);
   assert.equal(leadResponse.body.bookingRequest.guestContact.fullName, "Alias Guest");
   assert.equal(leadResponse.body.bookingRequest.guestContact.phone, "+84901112233");
+  assert.equal(leadResponse.body.bookingRequest.guestContact.email, "alias.guest@example.com");
   assert.equal(leadResponse.body.bookingRequest.numGuests, 3);
-  assert.equal(leadResponse.body.bookingRequest.roomName, "Family Suite");
+  assert.equal(leadResponse.body.bookingRequest.context.roomSlug, state.roomCode);
+  assert.equal(leadResponse.body.bookingRequest.context.roomPrice, 1200000);
+  assert.equal(leadResponse.body.bookingRequest.context.roomCapacity, 3);
+  assert.equal(leadResponse.body.bookingRequest.context.roomBedSummary, "1 giường đôi");
   assert.equal(leadResponse.body.bookingRequest.noCombo, true);
+  assert.equal(leadResponse.body.paymentUrl, undefined);
+  assert.equal(leadResponse.body.checkoutSession, undefined);
+});
+
+test("landing booking request resolves room by top-level slug and rejects unknown room identifiers", async () => {
+  const slugOnlyResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomSlug: state.roomCode,
+      checkInDate: "2026-10-22",
+      checkOutDate: "2026-10-24",
+      guests: 2,
+      guestFullName: "Slug Guest",
+      phone: "+84908887777",
+      guestArea: "Hà Nội",
+      noCombo: true,
+    }),
+  });
+
+  assert.equal(slugOnlyResponse.status, 201);
+  assert.equal(slugOnlyResponse.body.bookingRequest.roomId, state.roomId);
+  assert.equal(slugOnlyResponse.body.paymentUrl, undefined);
+  assert.equal(slugOnlyResponse.body.checkoutSession, undefined);
+
+  const unknownRoomResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomId: 999999,
+      checkInDate: "2026-10-22",
+      checkOutDate: "2026-10-24",
+      guests: 2,
+      guestFullName: "Missing Room Guest",
+      phone: "+84908887777",
+      guestArea: "Hà Nội",
+      noCombo: true,
+    }),
+  });
+
+  assert.equal(unknownRoomResponse.status, 400);
+  assert.equal(unknownRoomResponse.body.success, false);
+  assert.equal(unknownRoomResponse.body.details[0].type, "room.not_found");
+});
+
+test("landing booking request returns clear errors for missing contact fields", async () => {
+  const missingNameResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomSlug: state.roomCode,
+      checkInDate: "2026-10-26",
+      checkOutDate: "2026-10-28",
+      guests: 2,
+      phone: "+84908887777",
+      guestArea: "Hà Nội",
+      noCombo: true,
+    }),
+  });
+
+  assert.equal(missingNameResponse.status, 400);
+  assert.equal(missingNameResponse.body.success, false);
+  assert.ok(missingNameResponse.body.details.some((detail) => detail.field === "guestFullName"));
+
+  const missingAreaResponse = await request(`${baseUrls.booking}/bookings/booking-requests`, {
+    method: "POST",
+    body: JSON.stringify({
+      roomSlug: state.roomCode,
+      checkInDate: "2026-10-26",
+      checkOutDate: "2026-10-28",
+      guests: 2,
+      guestFullName: "No Area Guest",
+      phone: "+84908887777",
+      noCombo: true,
+    }),
+  });
+
+  assert.equal(missingAreaResponse.status, 400);
+  assert.equal(missingAreaResponse.body.success, false);
+  assert.ok(missingAreaResponse.body.details.some((detail) => detail.field === "guestArea"));
 });
 
 test("admin booking request list is protected and includes lead fields", async () => {

@@ -85,9 +85,10 @@ const bookingSchema = Joi.object({
 }).unknown(false);
 
 const bookingRequestSchema = Joi.object({
-  roomId: Joi.string().allow("").optional(),
+  roomId: Joi.alternatives().try(Joi.string(), Joi.number()).allow("").optional(),
   roomTypeId: Joi.string().allow("").optional(),
   roomCode: Joi.string().trim().lowercase().max(120).allow("").optional(),
+  roomSlug: Joi.string().trim().lowercase().max(160).allow("").optional(),
   roomName: Joi.string().trim().min(2).max(180).allow("").optional(),
   roomTypeName: Joi.string().trim().min(2).max(180).allow("").optional(),
   checkInDate: dateSchema.required(),
@@ -120,11 +121,18 @@ const bookingRequestSchema = Joi.object({
     roomBedSummary: Joi.string().trim().max(240).allow("").optional(),
     userAgent: Joi.string().trim().max(300).allow("").optional(),
   }).default({}),
-})
+  })
   .custom((value, helpers) => {
-    if (!value.roomId && !value.roomTypeId && !value.roomName && !value.roomTypeName) {
+    if (
+      !value.roomId &&
+      !value.roomSlug &&
+      !value.context?.roomSlug &&
+      !value.roomTypeId &&
+      !value.roomName &&
+      !value.roomTypeName
+    ) {
       return helpers.error("any.custom", {
-        message: "Room context is required.",
+        message: "Bella chưa nhận diện được phòng bạn đang quan tâm.",
       });
     }
 
@@ -165,15 +173,30 @@ function sendRequestValidationError(res, message, details = []) {
 
 function normalizeBookingRequestPayload(body = {}) {
   const payload = { ...body };
-  payload.guestFullName = payload.guestFullName ?? payload.fullName;
+  const incomingContext =
+    body.context && typeof body.context === "object" && !Array.isArray(body.context)
+      ? body.context
+      : {};
+  payload.context = { ...incomingContext };
+  payload.guestFullName = payload.guestFullName ?? payload.fullName ?? payload.customerName;
   payload.guestPhone = payload.guestPhone ?? payload.phone;
-  payload.guestArea = payload.guestArea ?? payload.area ?? payload.address;
+  payload.guestArea = payload.guestArea ?? payload.area ?? payload.address ?? payload.currentArea;
+  payload.guestEmail = payload.guestEmail ?? payload.email;
+  payload.checkInDate = payload.checkInDate ?? payload.checkIn;
+  payload.checkOutDate = payload.checkOutDate ?? payload.checkOut;
   payload.numGuests = payload.numGuests ?? payload.guests;
+  payload.roomId = payload.roomId === undefined || payload.roomId === null ? payload.roomId : String(payload.roomId).trim();
+  payload.roomSlug = payload.roomSlug ?? payload.context.roomSlug;
 
   delete payload.fullName;
+  delete payload.customerName;
   delete payload.phone;
+  delete payload.email;
   delete payload.area;
   delete payload.address;
+  delete payload.currentArea;
+  delete payload.checkIn;
+  delete payload.checkOut;
   delete payload.guests;
 
   return payload;
@@ -793,6 +816,99 @@ async function loadBellaRoom(
   }
 
   return room;
+}
+
+function buildBellaRoomVisibilityFilter({ requireAvailable = false, includeInactive = false } = {}) {
+  const filter = {};
+  if (!includeInactive) {
+    filter.is_active = { $ne: false };
+  }
+  if (requireAvailable) {
+    filter.is_available = true;
+  }
+  return filter;
+}
+
+function normalizePublicRoomIdentifier(value) {
+  const identifier = String(value || "").trim();
+  return identifier ? identifier.toLowerCase() : "";
+}
+
+async function loadBellaRoomByPublicIdentifier(
+  identifier,
+  { requireAvailable = false, includeInactive = false } = {},
+) {
+  const rawIdentifier = String(identifier || "").trim();
+  const normalizedIdentifier = normalizePublicRoomIdentifier(rawIdentifier);
+  if (!rawIdentifier) {
+    return null;
+  }
+
+  const candidates = [...new Set([rawIdentifier, normalizedIdentifier].filter(Boolean))];
+  const orFilters = candidates.flatMap((candidate) => [
+    { code: candidate },
+    { room_number: candidate },
+    { raw_source_name: candidate },
+  ]);
+
+  const numericIdentifier = Number(rawIdentifier);
+  if (Number.isFinite(numericIdentifier)) {
+    orFilters.push({ legacy_id: numericIdentifier }, { external_id: numericIdentifier });
+  }
+
+  const room = await Room.findOne({
+    ...buildBellaRoomVisibilityFilter({ requireAvailable, includeInactive }),
+    $or: orFilters,
+  })
+    .populate({
+      path: "hotel_id",
+      model: Hotel,
+      select: "name address city country",
+    })
+    .lean();
+
+  if (!room || !room.hotel_id || !isBellaHotelName(room.hotel_id.name)) {
+    return null;
+  }
+
+  return room;
+}
+
+async function resolveBookingRequestRoom(value) {
+  const roomId = String(value.roomId || "").trim();
+  if (roomId && mongoose.Types.ObjectId.isValid(roomId)) {
+    const room = await loadBellaRoom(roomId, { includeInactive: true });
+    if (room) {
+      return room;
+    }
+  }
+
+  const identifiers = [
+    value.roomSlug,
+    value.context?.roomSlug,
+    value.roomCode,
+    value.roomTypeId,
+    roomId && !mongoose.Types.ObjectId.isValid(roomId) ? roomId : null,
+  ].filter(Boolean);
+
+  for (const identifier of identifiers) {
+    const room = await loadBellaRoomByPublicIdentifier(identifier, { includeInactive: true });
+    if (room) {
+      return room;
+    }
+  }
+
+  return null;
+}
+
+function sendRoomNotFoundError(res) {
+  return sendRequestValidationError(res, "Không tìm thấy phòng được yêu cầu.", [
+    {
+      field: "roomId",
+      message: "Không tìm thấy phòng được yêu cầu.",
+      type: "room.not_found",
+    },
+  ]);
 }
 
 async function findBookingPayment(bookingId) {
@@ -1481,22 +1597,15 @@ router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
       ]);
     }
 
-    let room = null;
-    const hasRoomId = value.roomId && mongoose.Types.ObjectId.isValid(value.roomId);
-    if (value.roomId && !hasRoomId) {
-      return sendRequestValidationError(res, "Mã phòng không hợp lệ.", [
-        { field: "roomId", message: "Mã phòng không hợp lệ.", type: "objectId.invalid" },
-      ]);
-    }
-
-    if (hasRoomId) {
-      room = await loadBellaRoom(value.roomId, { includeInactive: true });
-      if (!room) {
-        return res.status(404).json({
-          success: false,
-          error: "Bella chưa tìm thấy hạng phòng này trong hệ thống.",
-        });
-      }
+    const room = await resolveBookingRequestRoom(value);
+    const hasResolvableRoomIdentifier = Boolean(
+      value.roomId ||
+        value.roomSlug ||
+        value.context?.roomSlug ||
+        value.roomCode,
+    );
+    if (hasResolvableRoomIdentifier && !room) {
+      return sendRoomNotFoundError(res);
     }
 
     let comboSnapshot = null;
@@ -1539,7 +1648,7 @@ router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
       request_reference: requestReference,
       source: "landing_page",
       room_id: room?._id || null,
-      room_code: value.roomCode || room?.code || null,
+      room_code: room?.code || value.roomCode || value.roomSlug || value.context?.roomSlug || null,
       room_name: room?.localized_name?.vi || room?.room_type || value.roomName || value.roomTypeName,
       check_in_date: stay.checkIn,
       check_out_date: stay.checkOut,
@@ -1557,6 +1666,9 @@ router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
       estimated_total: Number(value.estimatedTotal || 0),
       context: {
         ...value.context,
+        roomSlug: value.context?.roomSlug || value.roomSlug || room?.code || null,
+        roomPrice: value.context?.roomPrice ?? room?.price_per_night ?? null,
+        roomCapacity: value.context?.roomCapacity ?? room?.capacity ?? room?.max_occupancy ?? null,
         roomTypeId: value.roomTypeId || null,
         roomIsLive: value.context?.roomIsLive ?? Boolean(room?.is_available),
         userAgent: String(req.get("user-agent") || value.context?.userAgent || "").slice(0, 300),
