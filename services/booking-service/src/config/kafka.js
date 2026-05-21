@@ -8,6 +8,14 @@ const OUTBOX_RETRY_BASE_MS = 15_000;
 let kafka;
 let producer;
 let outboxInterval;
+let reconnectTimer;
+let kafkaStatus = {
+  connected: false,
+  connecting: false,
+  lastError: null,
+  brokers: [],
+  lastConnectedAt: null,
+};
 
 function getKafkaBrokers() {
   return (process.env.KAFKA_BOOTSTRAP_SERVERS || process.env.KAFKA_BROKER || "localhost:9092")
@@ -20,28 +28,75 @@ function buildBackoffDelay(attempts = 0) {
   return Math.min(5 * 60 * 1000, OUTBOX_RETRY_BASE_MS * Math.max(1, attempts + 1));
 }
 
-export async function initKafka() {
+function scheduleKafkaReconnect() {
+  if (reconnectTimer || kafkaStatus.connected) {
+    return;
+  }
+
+  const delayMs = Number(process.env.KAFKA_RECONNECT_MS || 10000);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void initKafka({ throwOnFailure: false });
+  }, delayMs);
+  reconnectTimer.unref?.();
+}
+
+export async function initKafka({ throwOnFailure = false } = {}) {
+  if (producer && kafkaStatus.connected) {
+    return true;
+  }
+  if (kafkaStatus.connecting) {
+    return false;
+  }
+
+  kafkaStatus.connecting = true;
+  kafkaStatus.brokers = getKafkaBrokers();
   try {
     kafka = new Kafka({
       clientId: OUTBOX_SERVICE_NAME,
-      brokers: getKafkaBrokers(),
+      brokers: kafkaStatus.brokers,
       retry: {
         initialRetryTime: 100,
-        retries: 8,
+        retries: Number(process.env.KAFKA_STARTUP_RETRIES || 3),
       },
     });
 
     producer = kafka.producer();
     await producer.connect();
+    kafkaStatus = {
+      connected: true,
+      connecting: false,
+      lastError: null,
+      brokers: kafkaStatus.brokers,
+      lastConnectedAt: new Date().toISOString(),
+    };
     console.log("Connected to Kafka");
+    return true;
   } catch (error) {
+    kafkaStatus = {
+      ...kafkaStatus,
+      connected: false,
+      connecting: false,
+      lastError: error?.message || "Kafka connection error",
+    };
     console.error("Kafka connection error:", error);
-    throw error;
+    try {
+      await producer?.disconnect();
+    } catch {
+      // Ignore cleanup errors after a failed Kafka connection attempt.
+    }
+    producer = null;
+    scheduleKafkaReconnect();
+    if (throwOnFailure) {
+      throw error;
+    }
+    return false;
   }
 }
 
 export async function publishEvent(topic, message) {
-  if (!producer) {
+  if (!producer || !kafkaStatus.connected) {
+    scheduleKafkaReconnect();
     throw new Error("Kafka producer not initialized");
   }
 
@@ -55,6 +110,10 @@ export async function publishEvent(topic, message) {
       },
     ],
   });
+}
+
+export function getKafkaStatus() {
+  return { ...kafkaStatus };
 }
 
 export async function enqueueOutboxEvent({
@@ -188,4 +247,6 @@ export async function disconnectKafka() {
   if (producer) {
     await producer.disconnect();
   }
+  producer = null;
+  kafkaStatus = { ...kafkaStatus, connected: false, connecting: false };
 }

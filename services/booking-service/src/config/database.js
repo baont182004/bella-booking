@@ -463,9 +463,20 @@ export const BookingOutboxEvent = mongoose.model("BookingOutboxEvent", outboxEve
 export const AuditLog = mongoose.model("AuditLog", auditLogSchema);
 export const User = mongoose.models.User || mongoose.model("User", userSchema);
 
+export function getDatabaseStatus() {
+  return {
+    readyState: mongoose.connection.readyState,
+    state:
+      ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] ||
+      "unknown",
+  };
+}
+
 export async function connectDatabase() {
   try {
-    await mongoose.connect(getMongoUri());
+    await mongoose.connect(getMongoUri(), {
+      serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 10000),
+    });
     console.log("Connected to MongoDB via Mongoose");
   } catch (error) {
     console.error("Database connection error:", error);

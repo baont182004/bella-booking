@@ -4,15 +4,16 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import bookingRoutes from "./routes/booking.routes.js";
-import { connectDatabase, testConnection } from "./config/database.js";
-import { connectRedis } from "./config/redis.js";
-import { initKafka, startOutboxProcessor } from "./config/kafka.js";
+import { connectDatabase, getDatabaseStatus, testConnection } from "./config/database.js";
+import { connectRedis, getRedisStatus, testRedisConnection } from "./config/redis.js";
+import { getKafkaStatus, initKafka, startOutboxProcessor } from "./config/kafka.js";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3003;
 const isDevelopment = process.env.NODE_ENV === "development";
+const dependencyRetryMs = Number(process.env.STARTUP_DEPENDENCY_RETRY_MS || 10000);
 const allowedOrigins = (
   process.env.CORS_ORIGINS ||
   process.env.CORS_ORIGIN ||
@@ -57,21 +58,51 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "32kb" }));
 
-app.get("/health", async (req, res) => {
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "booking-service",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "booking-service",
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+  });
+});
+
+app.get("/ready", async (req, res) => {
+  const checks = {
+    mongo: { ok: false, ...getDatabaseStatus() },
+    redis: { ok: false, ...getRedisStatus() },
+    kafka: { ok: getKafkaStatus().connected, required: false, ...getKafkaStatus() },
+  };
+
   try {
     await testConnection();
-    res.json({
-      status: "healthy",
-      service: "booking-service",
-      timestamp: new Date().toISOString(),
-    });
+    checks.mongo.ok = true;
   } catch (error) {
-    res.status(503).json({
-      status: "unhealthy",
-      service: "booking-service",
-      error: "Service dependency unavailable",
-    });
+    checks.mongo.error = error?.message || "MongoDB unavailable";
   }
+
+  try {
+    await testRedisConnection();
+    checks.redis.ok = true;
+  } catch (error) {
+    checks.redis.error = error?.message || "Redis unavailable";
+  }
+
+  const ready = checks.mongo.ok && checks.redis.ok;
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+    service: "booking-service",
+    timestamp: new Date().toISOString(),
+    checks,
+  });
 });
 
 app.use("/bookings", bookingRoutes);
@@ -88,15 +119,72 @@ app.use((err, req, res, next) => {
   });
 });
 
-async function startServer() {
+function retryInBackground(label, task) {
+  const run = async () => {
+    try {
+      await task();
+    } catch (error) {
+      console.error(`[startup] ${label} retry failed:`, error);
+      const timer = setTimeout(run, dependencyRetryMs);
+      timer.unref?.();
+    }
+  };
+
+  const timer = setTimeout(run, dependencyRetryMs);
+  timer.unref?.();
+}
+
+async function connectDependencies() {
+  console.log("[startup] Connecting to MongoDB...");
   try {
     await connectDatabase();
-    await connectRedis();
-    await initKafka();
-    startOutboxProcessor();
+    console.log("[startup] MongoDB connection ready.");
+  } catch (error) {
+    console.error("[startup] MongoDB connection failed; HTTP server remains up and will retry.", error);
+    retryInBackground("MongoDB", async () => {
+      console.log("[startup] Retrying MongoDB connection...");
+      await connectDatabase();
+      console.log("[startup] MongoDB connection ready after retry.");
+    });
+  }
+
+  console.log("[startup] Connecting to Redis...");
+  const redisConnected = await connectRedis({ throwOnFailure: false });
+  if (redisConnected) {
+    console.log("[startup] Redis connection ready.");
+  } else {
+    console.error("[startup] Redis connection failed; rate limiting/locks degrade and will retry.");
+    retryInBackground("Redis", async () => {
+      console.log("[startup] Retrying Redis connection...");
+      const connected = await connectRedis({ throwOnFailure: false });
+      if (!connected) {
+        throw new Error(getRedisStatus().lastError || "Redis unavailable");
+      }
+      console.log("[startup] Redis connection ready after retry.");
+    });
+  }
+
+  console.log("[startup] Connecting to Kafka...");
+  const kafkaConnected = await initKafka({ throwOnFailure: false });
+  if (kafkaConnected) {
+    console.log("[startup] Kafka connection ready.");
+  } else {
+    console.error("[startup] Kafka unavailable; outbox publish will retry in background.");
+  }
+
+  console.log("[startup] Starting booking outbox processor...");
+  startOutboxProcessor();
+  console.log("[startup] Booking outbox processor started.");
+}
+
+async function startServer() {
+  try {
+    console.log("[startup] Booking service booting...");
+    console.log("[startup] Express middleware and routes configured.");
 
     app.listen(PORT, () => {
       console.log(`Booking Service running on port ${PORT}`);
+      void connectDependencies();
     });
   } catch (error) {
     console.error("Failed to start server:", error);

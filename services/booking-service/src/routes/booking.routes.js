@@ -1706,7 +1706,11 @@ router.post("/booking-requests", bookingRequestRateLimit, async (req, res) => {
       },
     });
 
-    await enqueueDomainEvents([bookingRequestCreatedEvent]);
+    try {
+      await enqueueDomainEvents([bookingRequestCreatedEvent]);
+    } catch (error) {
+      console.error("Booking request notification enqueue failed:", error);
+    }
 
     await recordAuditLog({
       action: "booking_request.created",
